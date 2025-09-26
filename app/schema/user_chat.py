@@ -20,8 +20,6 @@ class StandaloneFileResponse(BaseModel):
     class Config:
         from_attributes = True
 
-
-
 class ChatSessionResponse(BaseModel):
     title: Optional[str]
     session_id: str

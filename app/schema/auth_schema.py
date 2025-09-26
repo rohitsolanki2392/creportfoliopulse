@@ -5,8 +5,7 @@ from typing import Optional
 class Token(BaseModel):
     access_token: str
     message: str
-    role: str   # yeh ab DB se aayega
-
+    role: str  
 
 class UserRegister(BaseModel):
     name: str
@@ -24,7 +23,7 @@ class OTPVerify(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
-    role: Optional[str] = None   # optional banaya
+    role: Optional[str] = None  
 
 
 class ForgotPassword(BaseModel):

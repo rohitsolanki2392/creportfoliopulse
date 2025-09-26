@@ -9,12 +9,7 @@ async def list_chat_sessions_service(current_user, db: Session):
 
     session_list = []
     for s in sessions:
-        messages = (
-            db.query(ChatHistory)
-            .filter_by(chat_session_id=s.id, user_id=current_user.id)
-            .order_by(ChatHistory.timestamp.asc())
-            .all()
-        )
+        messages = (db.query(ChatHistory).filter_by(chat_session_id=s.id, user_id=current_user.id).order_by(ChatHistory.timestamp.asc()).all())
 
         title = s.title if s.title else "Untitled Session"
 

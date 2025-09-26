@@ -11,6 +11,8 @@ from app.router import admin_user_chat, auth, buildings, chatbot, dashborad, inv
 from fastapi.staticfiles import StaticFiles
 
 
+import os
+os.environ["GRPC_VERBOSITY"] = "ERROR"
 
 def create_db_and_tables():
     Base.metadata.create_all(bind=engine)
@@ -31,7 +33,6 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 
-# ✅ CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -39,7 +40,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# ✅ Include routers
+
 app.include_router(auth.router, prefix="/auth")
 app.include_router(invite_user.router, prefix="/invite_user", tags=["Invite User"])
 app.include_router(dashborad.router, prefix="/admin", tags=["Dashboard"])
@@ -54,27 +55,23 @@ def on_startup():
     create_db_and_tables()
 
 
-
-# Handle all HTTPExceptions → { "message": "..." }
 @app.exception_handler(HTTPException)
 async def custom_http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(
         status_code=exc.status_code,
-        content={"message": exc.detail},  # ✅ rename detail → message
+        content={"message": exc.detail}, 
     )
 
-# Handle validation errors (422) → { "message": "Invalid request", "errors": [...] }
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
         status_code=422,
         content={
             "message": "Invalid request payload",
-            "errors": exc.errors()  # include details if needed
+            "errors": exc.errors()  
         }
     )
 
-# Handle ALL unhandled exceptions → { "message": "Internal server error" }
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(

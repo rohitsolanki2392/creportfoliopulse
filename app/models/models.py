@@ -71,7 +71,7 @@ class ChatSession(Base):
     title = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     category = Column(String, nullable=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)  # <-- REQUIRED
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False) 
 
 
     user = relationship("User", back_populates="chat_sessions", foreign_keys=[user_id])
@@ -97,7 +97,7 @@ class ChatHistory(Base):
     confidence = Column(Float, nullable=True)
     feedback = Column(String, nullable=True)
     response_json = Column(JSON)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)  # <-- REQUIRED
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False) 
 
 
     session = relationship("ChatSession", back_populates="messages", foreign_keys=[chat_session_id])
@@ -191,7 +191,7 @@ class Building(Base):
     id = Column(Integer, primary_key=True, index=True)
     address = Column(String, nullable=False)
     owner_id = Column(Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
-    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)  # <-- REQUIRED
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False) 
     owner = relationship("User", back_populates="buildings", foreign_keys=[owner_id])
     files = relationship("BuildingFile", back_populates="building", foreign_keys="BuildingFile.building_id", cascade="all, delete-orphan")
     permissions = relationship("BuildingPermission",back_populates="building",cascade="all, delete-orphan",foreign_keys="BuildingPermission.building_id")
@@ -205,7 +205,7 @@ class BuildingFile(Base):
     file_name = Column(String, nullable=False)
     original_file_name = Column(String, nullable=False)
     building_data = Column(JSON, nullable=True)
-    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)   # <-- required
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
     category = Column(String, nullable=True)
     building = relationship("Building", back_populates="files", foreign_keys=[building_id])
 
@@ -220,8 +220,8 @@ class StandaloneFile(Base):
     uploaded_at = Column(DateTime, default=datetime.utcnow)
     gcs_path = Column(String, nullable=False)
     file_size = Column(String, nullable=False, default="0")
-    structured_metadata = Column(String, nullable=True)  # Store JSON metadata
-    company_id = Column(Integer, ForeignKey("companies.id",ondelete="CASCADE"), nullable=False)   # <-- required
+    structured_metadata = Column(String, nullable=True) 
+    company_id = Column(Integer, ForeignKey("companies.id",ondelete="CASCADE"), nullable=False) 
     user = relationship("User", back_populates="standalone_files", foreign_keys=[user_id])
     building = relationship("Building", foreign_keys=[building_id])
 
@@ -231,7 +231,7 @@ class CategorizedFile(Base):
     original_file_name = Column(String, nullable=False)
     user_id = Column(Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
-    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)   # <-- required
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)  
     category = Column(SQLEnum(FileCategory, name="file_category_enum"), nullable=False)
     user = relationship("User", back_populates="categorized_files", foreign_keys=[user_id])
 

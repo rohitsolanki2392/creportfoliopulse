@@ -1,19 +1,15 @@
 from typing import List, Optional
 from pydantic import BaseModel
-from pydantic import BaseModel
-from typing import List, Optional
 from datetime import datetime
 class AskQuestionRequest(BaseModel):
     session_id: str
     question: str
     category: str
-    building_id: Optional[int] = None  # optional
+    building_id: Optional[int] = None  
     
 class ListFilesRequest(BaseModel):
     building_id: int
     category: Optional[str] = None
-
-
 
 class FileItem(BaseModel):
     file_id: str

@@ -1,4 +1,3 @@
-# app/routes/building_routes.py
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -22,23 +21,18 @@ def create_buildings(
         raise HTTPException(status_code=403, detail="Admin access required")
 
     created_buildings = building_crud.create_buildings(db, buildings, current_user.id,current_user.company_id)
-
-    # ✅ Grant approved access to all invited users for each new building
     invited_users = db.query(User).filter(User.role == "user").all()
     for building in created_buildings:
         for user in invited_users:
-            # Check if already exists (avoid duplicates)
             existing_req = db.query(BuildingAccessRequest).filter(
                 BuildingAccessRequest.user_id == user.id,
                 BuildingAccessRequest.building_id == building.id
             ).first()
 
             if not existing_req:
-                # Create access request
                 access_request = building_permission_crud.create_lease_access_request(db, user.id, building.id)
                 building_permission_crud.update_lease_request_status(db, access_request, "approve")
 
-            # Check permission separately
             existing_perm = db.query(BuildingPermission).filter(
                 BuildingPermission.user_id == user.id,
                 BuildingPermission.building_id == building.id

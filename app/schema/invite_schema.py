@@ -1,12 +1,10 @@
 from pydantic import BaseModel, EmailStr
+from datetime import datetime
+from typing import List
 
 class InviteUserCreate(BaseModel):
     email: EmailStr
 
-
-from pydantic import BaseModel
-from datetime import datetime
-from typing import List
 
 class UserListResponse(BaseModel):
     email: str

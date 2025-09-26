@@ -6,8 +6,6 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from app.models.models import ChatHistory, ChatSession, StandaloneFile
 
-# ---------- Standalone Files ----------
-
 def save_standalone_file(
     db: Session,
     file_id: str,
@@ -51,7 +49,7 @@ def delete_standalone_file(db: Session, file_id: str):
         db.commit()
     return db_file
 
-# ---------- Chat Sessions ----------
+
 
 def get_or_create_chat_session(
     db: Session,
@@ -88,7 +86,6 @@ def delete_user_chat_session(db: Session, session_id: str, user_id: int):
         db.commit()
     return session
 
-# ---------- Chat History ----------
 
 def save_chat_history(
     db: Session,

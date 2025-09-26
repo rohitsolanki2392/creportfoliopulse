@@ -19,8 +19,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif"}
 
-# ✅ Register User Service
-async def register_user_service(user, db: Session, background_tasks: BackgroundTasks):
+async def register_user_service(user, db: Session):
     cleanup_expired_otps()
 
     if user.role not in ["superuser", "admin", "user"]:
@@ -40,7 +39,7 @@ async def register_user_service(user, db: Session, background_tasks: BackgroundT
             auth_crud.delete_existing_otps(db, user.email)
             otp_code = generate_otp()
             auth_crud.create_otp(db, user.email, otp_code)
-            background_tasks.add_task(send_otp_email, user.email, otp_code, "Your Verification OTP")
+            send_otp_email (user.email, otp_code)
             return {"message": "OTP resent. Please verify with the OTP sent to your email."}
 
     if user.password != user.confirm_password:
@@ -55,9 +54,8 @@ async def register_user_service(user, db: Session, background_tasks: BackgroundT
     auth_crud.delete_existing_otps(db, user.email)
     otp_code = generate_otp()
     auth_crud.create_otp(db, user.email, otp_code)
-    background_tasks.add_task(send_otp_email, user.email, otp_code, "Your Verification OTP")
+    send_otp_email, (user.email, otp_code)
     return {"message": "OTP sent. Please verify with the OTP sent to your email."}
-
 
 
 def login_user_service(login_data, db: Session):
@@ -84,7 +82,6 @@ def login_user_service(login_data, db: Session):
         "access_token": token,
     }
 
-# ✅ Forgot Password Service
 async def forgot_password_service(data, db: Session, background_tasks: BackgroundTasks):
     cleanup_expired_otps(db)
     user = auth_crud.get_user_by_email(db, data.email)
@@ -148,14 +145,13 @@ async def update_user_profile_service(db: Session, current_user, name: str = Non
         if not file_bytes:
             raise HTTPException(status_code=400, detail="Uploaded file is empty")
         
-        # Save file locally
         new_filename = f"{uuid.uuid4().hex}{file_ext}"
         file_path = os.path.join(UPLOAD_DIR, new_filename)
         with open(file_path, "wb") as f:
             f.write(file_bytes)
         
         
-        current_user.photo_url = f"/uploads/profile_photos/{new_filename}"  # match your mounted path
+        current_user.photo_url = f"/uploads/profile_photos/{new_filename}"  
 
         image_preview = f"data:{'image/jpeg' if file_ext in ['.jpg','.jpeg'] else f'image/{file_ext[1:]}' };base64,{base64.b64encode(file_bytes).decode('utf-8')}"
         updated = True
@@ -177,12 +173,9 @@ def get_user_profile_service(current_user):
         "photo_url": current_user.photo_url,
         "photo_base64": None
     }
-    
 
     if current_user.photo_url:
-    # Map URL to local file path
         file_path = current_user.photo_url.replace("/uploads", "uploads")
-
         if os.path.exists(file_path):
             with open(file_path, "rb") as f:
                 file_bytes = f.read()
@@ -194,27 +187,21 @@ def get_user_profile_service(current_user):
     
     return response
 
-
-
-
 async def list_all_users_service(current_user: User, db: Session) -> List[UserListResponse]:
     if current_user.role not in ["superuser", "admin"]:
         raise HTTPException(status_code=403, detail="Superuser or admin access required")
 
     users = []
 
-    # 🔹 Superuser -> sirf admins
     if current_user.role == "superuser":
         users = db.query(User).filter(User.role == "admin").all()
 
-    # 🔹 Admin -> sirf apni company ke users
     elif current_user.role == "admin":
         users = db.query(User).filter(
             User.company_id == current_user.company_id,
             User.role == "user"
         ).all()
 
-    # Response list
     user_list = []
     for user in users:
         user_list.append(UserListResponse(
@@ -228,24 +215,17 @@ async def list_all_users_service(current_user: User, db: Session) -> List[UserLi
 
     return user_list
 
-
-
-
-
 def delete_user_service(db: Session, current_user: User, email: str):
     user = db.query(User).filter(User.email == email).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Only superuser or admin can delete
     if current_user.role not in ["superuser", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only superusers or admins can delete users"
         )
         
-
-    # Admin cannot delete users from another company
     if current_user.role == "admin" and user.company_id != current_user.company_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -255,27 +235,22 @@ def delete_user_service(db: Session, current_user: User, email: str):
 
     if user.role=="superuser":
         admin_company = db.query(User).filter(User.company_id == user.company_id).all()
-        print("#$^&")
         for u in admin_company:
             db.delete(u)
         db.commit()
-    # If deleting an admin -> delete all users in that admin's company first
     if user.role == "admin":
         users_in_company = db.query(User).filter(User.company_id == user.company_id).all()
         for u in users_in_company:
             db.delete(u)
-        db.commit()   # ✅ commit after deleting users
-
-        # Now delete the company
+        db.commit() 
         company = db.query(Company).filter(Company.id == user.company_id).first()
         if company:
             db.delete(company)
-        db.commit()   # ✅ commit again after deleting company
+        db.commit()   
 
         return {"message": f"Admin {user.email}, all company users, and the company deleted successfully"}
 
     else:
-        # Normal user delete
         db.delete(user)
         db.commit()
         return {"message": f"User {user.email} deleted successfully"}
@@ -304,12 +279,8 @@ async def invite_admin_service(invite_data, db: Session, background_tasks: Backg
         number="placeholder",
         hashed_password=hashed_password,
         role="admin",
-        is_verified=True   # ✅ directly pass kar diya
-)
-
-
-
-   # ✅ yaha forcefully verified set kar diya
+        is_verified=True  
+        )
 
     new_admin.company_id = new_company.id
     new_company.owner_id = new_admin.id
@@ -319,7 +290,7 @@ async def invite_admin_service(invite_data, db: Session, background_tasks: Backg
 
     token = create_bearer_token(db, new_admin.id)
     email_body = f"Your admin credentials:\nEmail: {invite_data.email}\nPassword: {raw_password}\nCompany: {invite_data.company_name}\nToken: {token}\nPlease login and change your password."
-    background_tasks.add_task(send_otp_email, invite_data.email, email_body, "Admin Invitation")
+    send_otp_email(invite_data.email, email_body)
     return {"message": "Admin invited successfully"}
 
 

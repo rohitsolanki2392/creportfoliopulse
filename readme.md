@@ -2,10 +2,10 @@
 
 ### Overview
 
-**MyApp Backend** is a FastAPI-based application for managing user authentication, file uploads, and file operations, seamlessly integrated with Google Cloud Platform (GCP). It provides:
+**Creportfolio  Backend** is a FastAPI-based application for managing user authentication, file uploads, and file operations, seamlessly integrated with Google Cloud Platform (GCP). It provides:
 
 * 🔐 **JWT-based user authentication**
-* ☁️ **File upload to Google Cloud Storage (GCS)**
+* ☁️ **File upload**
 * 🗂️ **Listing and deleting uploaded files**
 * 🔄 **Database migrations via Alembic**
 * 🚀 **Deployment-ready with Docker and Google Cloud Run**
@@ -16,7 +16,6 @@
 
 * **Backend**: Python, FastAPI
 * **Database**: PostgreSQL on Cloud SQL
-* **Storage**: Google Cloud Storage (GCS)
 * **AI Tools**: LangChain (planned integration)
 * **Authentication**: JWT
 * **Deployment**: Docker + Google Cloud Run
@@ -48,21 +47,17 @@ myapp-backend/
 
 * Python 3.11+
 * Docker
-* Google Cloud SDK (`gcloud`)
 * PostgreSQL client (`psql`)
 * GCP Project with:
 
   * Cloud SQL instance: `buildingmanagement`
-  * GCS bucket: ``
   * Service account with:
-
     * Secret Manager access
     * Storage Admin role
 
 ---
 
 ## 🚀 Setup Instructions
-
 ### 1. Clone the Repository
 
 ```bash
@@ -74,16 +69,12 @@ cd myapp-backend
 
 ```dotenv
 DATABASE_URL=postgresql://admin:your-admin-password@34.55.183.128:5432/user_admin_gcp
-GCS_BUCKET_NAME=myapp-files
-GOOGLE_API_KEY=your-google-api-key
-GOOGLE_CLOUD_PROJECT=sunny-airfoil-467202-f9
-CORS_ORIGINS=["http://localhost:3000"]
+CORS_ORIGINS=["your url "]
 SMTP_SERVER=smtp.gmail.com
 SMTP_PORT=587
-EMAIL_SENDER=bespokeai03@gmail.com
+EMAIL_SENDER=
 EMAIL_PASSWORD=your-email-app-password
 SECRET_KEY=your-secure-32-char-key
-GOOGLE_CLOUD_CREDENTIALS_PATH=/path/to/your/service-account.json
 ```
 
 > Replace placeholders with your actual credentials.
@@ -92,21 +83,15 @@ GOOGLE_CLOUD_CREDENTIALS_PATH=/path/to/your/service-account.json
 
 ```bash
 python -m venv myenv
-source myenv/bin/activate  # Windows: myenv\Scripts\activate
+source myenv/bin/activate  
 pip install -r requirements.txt
 ```
 
 ### 4. Run Database Migrations
 
-```bash
-alembic upgrade head
-```
-
 Check tables using:
 
-```bash
-psql -h 34.55.183.128 -U admin -d user_admin_gcp
-\dt
+
 ```
 
 ### 5. Start the App Locally
@@ -215,61 +200,11 @@ gcloud auth configure-docker
 docker push gcr.io/sunny-airfoil-467202-f9/myapp-backend:latest
 ```
 
-### 3. Deploy
 
-```bash
-gcloud run deploy myapp-backend \
-  --image gcr.io/sunny-airfoil-467202-f9/myapp-backend:latest \
-  --region us-central1 \
-  --platform managed \
-  --allow-unauthenticated \
-  --service-account myapp-storage@sunny-airfoil-467202-f9.iam.gserviceaccount.com \
-  --set-cloudsql-instances sunny-airfoil-467202-f9:us-central1:buildingmanagement \
-  --set-env-vars "GCS_BUCKET_NAME=myapp-files" \
-  --set-env-vars "GOOGLE_CLOUD_PROJECT=sunny-airfoil-467202-f9" \
-  --set-env-vars "CORS_ORIGINS=http://localhost:3000" \
-  --set-secrets "GOOGLE_API_KEY=google-api-key:latest" \
-  --set-secrets "DATABASE_URL=database-url:latest" \
-  --set-secrets "JWT_SECRET_KEY=jwt-secret-key:latest" \
-  --set-secrets "SMTP_SERVER=smtp-server:latest" \
-  --set-secrets "SMTP_PORT=smtp-port:latest" \
-  --set-secrets "EMAIL_SENDER=email-sender:latest" \
-  --set-secrets "EMAIL_PASSWORD=email-password:latest" \
-  --set-secrets "GOOGLE_CLOUD_CREDENTIALS=gcp-credentials:latest"
-```
-
-### 4. Secure the Deployment
-
-```bash
-gcloud run services update myapp-backend --no-allow-unauthenticated
-```
 
 ---
 
-## 🛠️ Troubleshooting
 
-| Issue               | Solution                                        |
-| ------------------- | ----------------------------------------------- |
-| **DB Errors**       | Verify Cloud SQL IP access and `DATABASE_URL`   |
-| **Auth Failure**    | Ensure correct user credentials & password hash |
-| **GCS Issues**      | Check IAM permissions on GCS bucket             |
-| **Missing Secrets** | Ensure secrets are present in Secret Manager    |
-
----
-
-## 👥 Contributing
-
-1. Fork this repository
-2. Create a new branch `git checkout -b feature-xyz`
-3. Commit your changes
-4. Push and open a Pull Request
-
----
 
 ## 📄 License
 
-Licensed under the [MIT License](LICENSE)
-
----
-
-Let me know if you want the `README.md` generated as a downloadable file.

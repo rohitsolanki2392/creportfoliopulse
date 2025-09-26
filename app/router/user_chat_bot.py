@@ -75,7 +75,6 @@ async def list_chat_sessions(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Call service function using await
     return await list_chat_sessions_service(current_user, db)
 
 

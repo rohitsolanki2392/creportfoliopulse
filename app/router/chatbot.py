@@ -39,7 +39,6 @@ async def ask_question(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):  
-    print("google_api_key:", os.getenv("GOOGLE_API_KEY"))
     return await ask_simple_service(req, current_user, db)
 
 

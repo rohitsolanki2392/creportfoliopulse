@@ -1,20 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy.orm import Session
-
 from typing import List, Optional
 from app.database.db import get_db
 from app.models.models import  User
 from app.schema.user_chat import StandaloneFileResponse
 from app.services.session_service import get_session_history_service
 from app.utils.auth_utils import get_current_user
-
-from fastapi import File, UploadFile, Query, Depends
-from typing import Optional
-from fastapi import APIRouter, Depends, Query
-from typing import Optional, List
 from app.services.user_chatbot_service import delete_simple_file_service, list_simple_files_service, update_standalone_file_service, upload_standalone_files_service
 router = APIRouter()
-
 
 @router.post("/upload", response_model=List[StandaloneFileResponse])
 async def upload_categorized_files(
@@ -23,19 +16,9 @@ async def upload_categorized_files(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Only admins can upload categorized files")
-    try:
-        if category not in ["Broker", "Market", "Building", "Colleague"]:
-            raise HTTPException(status_code=400, detail="Invalid category")
-        
-        return await upload_standalone_files_service(files, category, current_user, db)
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-
+    
+    return await upload_standalone_files_service(files, category, current_user, db)
+   
 
 @router.patch("/update", response_model=StandaloneFileResponse)
 async def update_file(

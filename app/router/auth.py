@@ -1,11 +1,10 @@
 
 
-# app/routes/auth.py
 from fastapi import APIRouter, Depends, BackgroundTasks,Request, status, Form, File, UploadFile
 from sqlalchemy.orm import Session
 from app.database.db import get_db
 from app.models.models import User
-from app.schema.auth_schema import ForgotPassword, OTPVerify, ResetPassword, Token, UserLogin, UserProfile, UserRegister, InviteAdminRequest
+from app.schema.auth_schema import ForgotPassword, OTPVerify, ResetPassword, Token, UserLogin, UserProfile, UserRegister
 from app.services.invite_service import invite_service
 from app.utils.auth_utils import get_current_user
 from app.services import auth_service
@@ -40,7 +39,7 @@ async def get_user_profile(
 ):
     return auth_service.get_user_profile_service(current_user)
 
-@router.post("/register", status_code=status.HTTP_201_CREATED, tags=["Auth"])
+@router.post("/register", tags=["Auth"])
 async def register_user(user: UserRegister, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     return await auth_service.register_user_service(user, db, background_tasks)
 
