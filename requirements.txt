@@ -2,6 +2,7 @@ langchain
 pydantic
 passlib[bcrypt]
 pydantic[email]
+bcrypt==4.0.1
 langchain-pinecone
 langchain-core
 pinecone-client

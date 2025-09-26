@@ -39,7 +39,7 @@ async def register_user_service(user, db: Session):
             auth_crud.delete_existing_otps(db, user.email)
             otp_code = generate_otp()
             auth_crud.create_otp(db, user.email, otp_code)
-            send_otp_email (user.email, otp_code)
+            otp=send_otp_email (user.email, otp_code)
             return {"message": "OTP resent. Please verify with the OTP sent to your email."}
 
     if user.password != user.confirm_password:

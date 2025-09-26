@@ -22,7 +22,7 @@ EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 def generate_otp() -> str:
     return ''.join(random.choices(string.digits, k=6))
 
-async def send_otp_email(email: str, otp: str):
+def send_otp_email(email: str, otp: str):
     try:
         msg = EmailMessage()
         subject = "Your Code for Verification"
