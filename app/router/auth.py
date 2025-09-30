@@ -40,8 +40,8 @@ async def get_user_profile(
     return auth_service.get_user_profile_service(current_user)
 
 @router.post("/register", tags=["Auth"])
-async def register_user(user: UserRegister, db: Session = Depends(get_db)):
-    return await auth_service.register_user_service(user, db)
+async def register_user(user: UserRegister,db: Session = Depends(get_db)):
+    return await auth_service.register_user_service(user,db)
 
 @router.post("/login", response_model=Token, tags=["Auth"])
 async def login_user(login_data: UserLogin, db: Session = Depends(get_db)):

@@ -2,10 +2,10 @@ langchain
 pydantic
 passlib[bcrypt]
 pydantic[email]
-bcrypt==4.0.1
 langchain-pinecone
 langchain-core
 pinecone-client
+bcrypt==4.0.1
 pypdf
 tiktoken
 fpdf
@@ -38,3 +38,5 @@ google-cloud-secret-manager
 tabulate
 google-cloud-aiplatform
 PyPDF2
+google-generativeai
+google-genai

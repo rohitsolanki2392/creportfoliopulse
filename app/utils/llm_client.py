@@ -3,14 +3,15 @@ import json
 import re
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
-
+from app.config import google_api_key
 load_dotenv()
 
-google_api_key = os.getenv("GOOGLE_API_KEY")
+
 
 llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
+    model="gemini-2.0-flash",
     google_api_key=google_api_key,
+    temperature=0.2
 )
 
 

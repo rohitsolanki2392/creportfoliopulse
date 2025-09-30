@@ -7,9 +7,6 @@ from datetime import datetime
 from fastapi.security import OAuth2PasswordBearer
 from app.database.db import SessionLocal
 from app.models.models import OTP
-
-
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 SMTP_SERVER = os.getenv("SMTP_SERVER")

@@ -2,27 +2,24 @@ import os
 import uuid
 import logging
 import asyncio
-
 from typing import List, Optional, Union
 import pinecone
 import google.generativeai as genai
-import PyPDF2
 import pandas as pd
-import docx
 from fastapi import HTTPException
-
-
+from docx.text.paragraph import Paragraph
+import os
+from google import genai
+import google.generativeai as gen
+import PyPDF2
 import docx
-import pandas as pd
 from docx.table import Table
 from docx.text.paragraph import Paragraph
-import PyPDF2
-import docx
-import pandas as pd
-import io
+
+
 logger = logging.getLogger(__name__)
 
-
+client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 async def save_to_temp(file, id, user, category) -> str:
     company_id = user.company_id
@@ -127,6 +124,62 @@ def extract_text_from_file(file_path: str) -> str:
 
 
 
+def guess_mime_type(file_path: str) -> str:
+    ext = file_path.split(".")[-1].lower()
+    if ext == "pdf":
+        return "application/pdf"
+    elif ext == "docx":
+        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    elif ext == "xlsx":
+        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    elif ext == "csv":
+        return "text/csv"
+    elif ext == "txt":
+        return "text/plain"
+    else:
+        return "application/octet-stream"
+
+
+
+
+
+def extract_text_from_file_using_llm(file_path: str) -> str:
+    """
+    Extract text and tables from a file using Gemini.
+    - Returns extracted text as string
+    - Raises ValueError("Cannot process file: No text extracted") if fails
+    """
+    try:
+
+        uploaded_file = client.files.upload(file=file_path)  
+
+
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",   # or "gemini-1.5-flash"
+            contents=[
+                uploaded_file,
+                """You are an expert data extractor. Extract content from the given file, regardless of format: PDF, DOCX, TXT, CSV, or scanned image-based files. 
+                Requirements:
+                -If the file contains scanned images or PDFs, perform OCR to extract text accurately.
+                -Extract all text, headings, bullet points, numbers, formulas, and annotations.
+                -Preserve tables exactly as they appear in the file, keeping rows and columns intact in **markdown or CSV format**.
+                -For images, describe them briefly if they contain important information.
+                -Return only clean, structured content, without any unrelated metadata or formatting artifacts.
+                -Organize the output logically, preserving the original structure of the document as much as possible.
+                Output should be fully text-based, structured, and ready for further analysis or processing."""
+            ],
+        )
+
+        # 3. Get output
+        text = getattr(response, "text", "").strip()
+        if not text:
+            raise ValueError("Cannot process file: No text extracted")
+        return text
+
+    except Exception as e:
+        raise ValueError(f"Cannot process file: {e}")
+
+
 
 
 async def get_embedding(texts: Union[str, List[str]], api_key: str, output_dim: int = 1536) -> List[List[float]]:
@@ -135,11 +188,11 @@ async def get_embedding(texts: Union[str, List[str]], api_key: str, output_dim: 
     if not texts:
         raise ValueError("No texts provided for embedding")
     
-    genai.configure(api_key=api_key)
+    gen.configure(api_key=api_key)
     model = os.getenv("GEMINI_EMBEDDING_MODEL")
     
     def embed_sync():
-        result = genai.embed_content(
+        result = gen.embed_content(
             model=model,
             content=texts, 
             task_type="RETRIEVAL_DOCUMENT",
@@ -194,7 +247,7 @@ async def process_uploaded_file(file_path,  filename,  file_id,  google_api_key,
         index = get_pinecone_index()
         vectors = []
         
-        print(len(chunks))
+
         if chunks:
             embeddings = await get_embedding(chunks, google_api_key)  
             vectors = []

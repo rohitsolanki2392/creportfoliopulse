@@ -5,19 +5,15 @@ from fastapi.responses import JSONResponse
 from app.crud.dashborad import get_activity_summary_data, get_analytics_data, get_rag_metrics_data, get_recent_questions_data, get_stats_data, get_usage_trends_data
 import json
 import re
-from langchain_google_genai import ChatGoogleGenerativeAI
+
 import os
 from dotenv import load_dotenv
-
+from app.utils.llm_client import llm
 from app.services.prompts import get_ai_insights_prompt, get_recent_questions_prompt, get_usage_trends_prompt
 
 
 load_dotenv()
-google_api_key = os.getenv("GOOGLE_API_KEY")
-llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
-    google_api_key=google_api_key,
-)
+
 
 def get_stats_service(db: Session, company_id: int):
     last_24h = datetime.utcnow() - timedelta(hours=24)

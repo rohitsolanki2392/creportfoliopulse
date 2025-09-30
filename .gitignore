@@ -1,113 +1,96 @@
+# ----------------------
+# Project Specific
+# ----------------------
+uploads/
 faiss_index_*
+filemetadata.json
+file_metadata.json
+*.sqlite
+*.db
+*.log
+
+# Credentials and Keys
 .env
-uploads
-__pycache__/
-myenv/
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.egg-info/
-*.dist-info/
-app/__pycache__
-# Environment and Credentials
-.env
-gcp-keys/
 *.json
 *.pem
 *.key
+*.env
+gcp-keys/
+gen-lang-client-*.json
+sunny-airfoil-*.json
 
-# Alembic Migrations
-alembic/versions/
-
-# Virtual Environment
-myenv/
-venv/
-
-# Temporary and Generated Files
-faiss_index_*
-*.log
-filemetadata.json
-*.sqlite
-*.db
-
-# Local Tools
-cloud_sql_proxy
-cloud_sql_proxy.exe
-
-# IDE
-.vscode/
-.idea/
-.env
-# Docker
-*.dockerignore
-app/services/templates/
-# Byte-compiled / cache files
+# ----------------------
+# Python
+# ----------------------
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
-*.pyc
-
-# C extensions
-*.so
-
-# Distribution / packaging
 *.egg
 *.egg-info/
+*.dist-info/
+
+# ----------------------
+# Virtual Environment
+# ----------------------
+venv/
+.venv/
+ENV/
+env/
+myenv/
+
+# ----------------------
+# Build / Distribution
+# ----------------------
 dist/
 build/
 .eggs/
+*.whl
 
-# Logs
-*.log
-
-# Environment
-.env
-.venv/
-venv/
-ENV/
-env/
-*.env
-
-# IDEs / Editors
+# ----------------------
+# IDE / Editor
+# ----------------------
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Alembic migration cache
-alembic/__pycache__/
-alembic/versions/__pycache__/
+# ----------------------
+# Alembic
+# ----------------------
+alembic/
+alembic.ini
+alembic/versions/
 
+# ----------------------
+# OS Files
+# ----------------------
+.DS_Store
+Thumbs.db
+
+# ----------------------
+# Docker
+# ----------------------
+*.dockerignore
+
+# ----------------------
+# Local Tools
+# ----------------------
+cloud_sql_proxy
+cloud_sql_proxy.exe
+
+# ----------------------
 # App-specific caches
+# ----------------------
 app/__pycache__/
 app/crud/__pycache__/
 app/router/__pycache__/
 app/schema/__pycache__/
 app/services/__pycache__/
 app/utils/__pycache__/
+app/services/templates/
 
-# Zipped files
+# ----------------------
+# Archives
+# ----------------------
 *.zip
-
-# OS
-.DS_Store
-Thumbs.db
-# Environment files
-.env
-
-# Python cache
-__pycache__/
-*.pyc
-
-# Alembic migration cache
-alembic/
-alembic.ini
-
-# Local metadata
-file_metadata.json
-
-# Virtual environment
-venv/

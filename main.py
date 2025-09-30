@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from app.models.models import Base
 from app.database.db import engine
-from app.router import admin_user_chat, auth, buildings, chatbot, dashborad, invite_user,  user_chat_bot
+from app.router import admin_user_chat, auth, buildings, chatbot, dashborad, invite_user,  user_chat_bot,gen_lease
 from fastapi.staticfiles import StaticFiles
 
 
@@ -44,6 +44,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/auth")
 app.include_router(invite_user.router, prefix="/invite_user", tags=["Invite User"])
 app.include_router(dashborad.router, prefix="/admin", tags=["Dashboard"])
+app.include_router(gen_lease.router,prefix="/generate_lease", tags=["Generate Lease"])
 app.include_router(user_chat_bot.router, prefix="/user",tags=["Portfolio Chatbot"])
 app.include_router(admin_user_chat.router, prefix="/admin_user_chat", tags=["Data categories chatbot"])
 app.include_router(buildings.router, prefix="/building_operations", tags=["Building Operations"])

@@ -3,17 +3,13 @@ import re
 from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from app.crud.user_chatbot_crud import get_or_create_chat_session, save_chat_history, save_standalone_file
 from app.models.models import  StandaloneFile
 from app.schema.chat_bot_schema import FileItem, ListFilesResponse
 from app.schema.user_chat import StandaloneFileResponse
-from app.utils.gcp_utils import get_secret
 from app.utils.process_file import get_embedding, get_pinecone_index, save_to_temp, process_uploaded_file
-from google.cloud import storage
-from google.oauth2 import service_account
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
 import logging
 from uuid import uuid4
@@ -23,14 +19,9 @@ from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from app.models.models import StandaloneFile
-from google.cloud import storage
-from google.oauth2 import service_account
-from datetime import timedelta
-import json
-
-
+from app.config import google_api_key
 from app.utils.process_file import get_pinecone_index, process_uploaded_file, save_to_temp
-
+from app.utils.llm_client import llm
 
 SUPPORTED_EXT = ['.pdf', '.docx', '.txt', '.xlsx','.csv']
 
@@ -57,7 +48,7 @@ async def upload_standalone_files_service(
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only admins can upload categorized files")
         
-    google_api_key = os.getenv("GOOGLE_API_KEY")
+    # google_api_key = os.getenv("GOOGLE_API_KEY")
 
     company_id = current_user.company_id
 
@@ -124,7 +115,7 @@ async def upload_standalone_files_service(
     return uploaded_files
 
 async def ask_simple_service(req, current_user, db: Session):
-    google_api_key = os.getenv("GOOGLE_API_KEY")
+    # google_api_key = os.getenv("GOOGLE_API_KEY")
     if not google_api_key:
         raise HTTPException(500, "Google API key missing")
 
@@ -135,9 +126,9 @@ async def ask_simple_service(req, current_user, db: Session):
 
     question_lower = req.question.lower().strip()
 
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash", google_api_key=google_api_key, temperature=0.2
-    )
+    # llm = ChatGoogleGenerativeAI(
+    #     model="gemini-2.0-flash", google_api_key=google_api_key, temperature=0.2
+    # )
 
     classification_prompt = """
     You are a helpful assistant that classifies user queries into two categories: 'general' or 'specific'.
@@ -316,7 +307,7 @@ async def update_standalone_file_service(
     building_id: Optional[int] = None,
     category: Optional[str] = None
 ):
-    google_api_key = os.getenv("GOOGLE_API_KEY")
+    # google_api_key = os.getenv("GOOGLE_API_KEY")
     if not google_api_key:
         raise HTTPException(status_code=500, detail="Configuration missing: GOOGLE_API_KEY")
 

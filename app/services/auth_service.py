@@ -2,7 +2,6 @@
 import base64
 import os
 from typing import List
-from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from app.models.models import User, Company
 import uuid
@@ -39,7 +38,8 @@ async def register_user_service(user, db: Session):
             auth_crud.delete_existing_otps(db, user.email)
             otp_code = generate_otp()
             auth_crud.create_otp(db, user.email, otp_code)
-            otp=send_otp_email (user.email, otp_code)
+            otp= send_otp_email (user.email, otp_code)
+            
             return {"message": "OTP resent. Please verify with the OTP sent to your email."}
 
     if user.password != user.confirm_password:
@@ -54,7 +54,7 @@ async def register_user_service(user, db: Session):
     auth_crud.delete_existing_otps(db, user.email)
     otp_code = generate_otp()
     auth_crud.create_otp(db, user.email, otp_code)
-    send_otp_email, (user.email, otp_code)
+    send_otp_email(user.email, otp_code)
     return {"message": "OTP sent. Please verify with the OTP sent to your email."}
 
 
@@ -83,7 +83,7 @@ def login_user_service(login_data, db: Session):
     }
 
 async def forgot_password_service(data, db: Session, background_tasks: BackgroundTasks):
-    cleanup_expired_otps(db)
+    cleanup_expired_otps()
     user = auth_crud.get_user_by_email(db, data.email)
     if not user:
         raise HTTPException(404, "User not found")
@@ -94,7 +94,7 @@ async def forgot_password_service(data, db: Session, background_tasks: Backgroun
     auth_crud.delete_existing_otps(db, data.email)
     otp_code = generate_otp()
     auth_crud.create_otp(db, data.email, otp_code)
-    background_tasks.add_task(send_otp_email, data.email, otp_code, "Password Reset OTP")
+    background_tasks.add_task(send_otp_email, data.email, otp_code)
     return {"message": "Password reset OTP sent to your email."}
 
 
@@ -112,7 +112,7 @@ def reset_password_service(data, db: Session):
 
 
 def verify_otp_service(data, db: Session):
-    cleanup_expired_otps(db)
+    cleanup_expired_otps()
     otp_record = auth_crud.get_valid_otp(db, data.email, data.otp)
     if not otp_record:
         raise HTTPException(400, "Invalid or expired OTP")
