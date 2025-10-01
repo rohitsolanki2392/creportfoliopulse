@@ -192,7 +192,13 @@ async def ask_simple_service(req, current_user, db: Session):
             if not result["matches"]:
                 logger.warning("No Pinecone matches found")
                 answer = "Information not available in documents"
-                return answer
+                return {
+                    "session_id": req.session_id,
+                    "question": req.question,
+                    "answer": answer,
+                    "source_file": None,
+                    "all_answers": [],
+                }
             else:
                 for m in result["matches"]:
                     logger.info(f"Match score: {m['score']}, Chunk: {m['metadata']['chunk'][:2000]}")
