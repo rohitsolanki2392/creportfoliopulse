@@ -3,6 +3,7 @@ import uuid
 import logging
 import asyncio
 from typing import List, Optional, Union
+from app.utils.docx_extreactinon import extract_docx_text
 import pinecone
 import google.generativeai as genai
 import pandas as pd
@@ -78,10 +79,59 @@ def extract_docx_mixed(file_path: str) -> str:
     return full_text
 
 
+# def extract_text_from_file(file_path: str) -> str:
+#     ext = file_path.split('.')[-1].lower()
+    
+
+#     if ext == "pdf":
+#         with open(file_path, "rb") as f:
+#             reader = PyPDF2.PdfReader(f)
+#             text = "".join(page.extract_text() or "" for page in reader.pages)
+#         if not text.strip():
+#             raise ValueError("Cannot process file: No text extracted")
+#         return text
+
+
+#     elif ext == "docx":
+#         text= extract_docx_mixed(file_path)
+#         if not text.strip():
+#             raise ValueError("Cannot process file: No text extracted")
+#         return text
+
+#     elif ext == "xlsx":
+#         df = pd.read_excel(file_path, engine="openpyxl")
+#         if df.empty:
+#             raise ValueError("Cannot process file: No data extracted")
+#         return df.to_string()
+
+#     elif ext == "csv":
+#         df = pd.read_csv(file_path)
+#         if df.empty:
+#             raise ValueError("Cannot process file: No data extracted")
+#         return df.to_string()
+
+
+#     elif ext == "txt":
+#         with open(file_path, "r", encoding="utf-8") as f:
+#             text = f.read()
+#         if not text.strip():
+#             raise ValueError("Cannot process file: No text extracted")
+#         return text
+
+#     else:
+#         raise ValueError("Unsupported file format")
+
+
+import PyPDF2
+import pandas as pd
+
+# Assume extract_docx_text is defined as in the previous artifact
+# It should be included in the same script or imported from another module
+# For example, if it's in the same file, it should be above this code
+
 def extract_text_from_file(file_path: str) -> str:
     ext = file_path.split('.')[-1].lower()
     
-
     if ext == "pdf":
         with open(file_path, "rb") as f:
             reader = PyPDF2.PdfReader(f)
@@ -90,11 +140,11 @@ def extract_text_from_file(file_path: str) -> str:
             raise ValueError("Cannot process file: No text extracted")
         return text
 
-
     elif ext == "docx":
-        text= extract_docx_mixed(file_path)
+        text = extract_docx_text(file_path)  # Call the existing extract_docx_text function
         if not text.strip():
             raise ValueError("Cannot process file: No text extracted")
+        print(text)
         return text
 
     elif ext == "xlsx":
@@ -109,7 +159,6 @@ def extract_text_from_file(file_path: str) -> str:
             raise ValueError("Cannot process file: No data extracted")
         return df.to_string()
 
-
     elif ext == "txt":
         with open(file_path, "r", encoding="utf-8") as f:
             text = f.read()
@@ -119,7 +168,6 @@ def extract_text_from_file(file_path: str) -> str:
 
     else:
         raise ValueError("Unsupported file format")
-
 
 
 
