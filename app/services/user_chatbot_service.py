@@ -71,7 +71,6 @@ async def upload_standalone_files_service(
                 os.remove(temp_path)
                 continue
             unique_filename = f"standalone_files/{file_id}{file_ext}"
-            print(unique_filename)
 
             await process_uploaded_file(
                 temp_path, file.filename, file_id, google_api_key, category, company_id, building_id=building_id
