@@ -42,92 +42,14 @@ async def save_to_temp(file, id, user, category) -> str:
 
 
 
-def extract_docx_mixed(file_path: str) -> str:
-    doc = docx.Document(file_path)
-    text_parts = []
-
-    def table_to_text(table: Table) -> str:
-        rows = []
-        for row in table.rows:
-            cells = [cell.text.strip() for cell in row.cells]
-            if any(cells):  
-                rows.append(cells)
-        if rows:
-            try:
-                df = pd.DataFrame(rows)
-                return df.to_string(index=False, header=False)
-            except Exception:
-                return "\n".join([" | ".join(r) for r in rows])
-        return ""
-
-    for element in doc.element.body:
-        if isinstance(element, docx.oxml.CT_P):  
-            para = Paragraph(element, doc)
-            if para.text.strip():
-                text_parts.append(para.text.strip())
-        elif isinstance(element, docx.oxml.CT_Tbl):  
-            table = Table(element, doc)
-            table_text = table_to_text(table)
-            if table_text:
-                text_parts.append(table_text)
-
-    full_text = "\n\n".join(text_parts)
-
-    if not full_text.strip():
-        raise ValueError("Cannot process file: No text extracted")
-
-    return full_text
 
 
-# def extract_text_from_file(file_path: str) -> str:
-#     ext = file_path.split('.')[-1].lower()
-    
-
-#     if ext == "pdf":
-#         with open(file_path, "rb") as f:
-#             reader = PyPDF2.PdfReader(f)
-#             text = "".join(page.extract_text() or "" for page in reader.pages)
-#         if not text.strip():
-#             raise ValueError("Cannot process file: No text extracted")
-#         return text
-
-
-#     elif ext == "docx":
-#         text= extract_docx_mixed(file_path)
-#         if not text.strip():
-#             raise ValueError("Cannot process file: No text extracted")
-#         return text
-
-#     elif ext == "xlsx":
-#         df = pd.read_excel(file_path, engine="openpyxl")
-#         if df.empty:
-#             raise ValueError("Cannot process file: No data extracted")
-#         return df.to_string()
-
-#     elif ext == "csv":
-#         df = pd.read_csv(file_path)
-#         if df.empty:
-#             raise ValueError("Cannot process file: No data extracted")
-#         return df.to_string()
-
-
-#     elif ext == "txt":
-#         with open(file_path, "r", encoding="utf-8") as f:
-#             text = f.read()
-#         if not text.strip():
-#             raise ValueError("Cannot process file: No text extracted")
-#         return text
-
-#     else:
-#         raise ValueError("Unsupported file format")
 
 
 import PyPDF2
 import pandas as pd
 
-# Assume extract_docx_text is defined as in the previous artifact
-# It should be included in the same script or imported from another module
-# For example, if it's in the same file, it should be above this code
+
 
 def extract_text_from_file(file_path: str) -> str:
     ext = file_path.split('.')[-1].lower()
@@ -144,7 +66,6 @@ def extract_text_from_file(file_path: str) -> str:
         text = extract_docx_text(file_path)  # Call the existing extract_docx_text function
         if not text.strip():
             raise ValueError("Cannot process file: No text extracted")
-        print(text)
         return text
 
     elif ext == "xlsx":
