@@ -130,14 +130,16 @@ async def ask_simple_service(req, current_user, db: Session):
     # )
 
     classification_prompt = """
-    You are a helpful assistant that classifies user queries into two categories: 'general' or 'specific'.
-    - 'general' queries include greetings(e.g., "Hello", "How are you?").
-    - 'specific' queries are related to categorized files, inquiries about documents, or specific information (e.g., "What is in the lease agreement?", "Find details about the tenant contract").
-    Based on the query, return a JSON object with a single key 'query_type' and a value of either 'general' or 'specific'.
-    Do not assume or infer beyond the query provided.
+            You are a professional real estate and property management analyst. 
+            Classify user queries into two categories: 'greeting' or 'specific'.
+            - 'greeting' queries include simple salutations like "Hi", "Hello", "Hey".
+            - 'specific' queries include all other questions, including questions about yourself, documents, lease agreements, or property management.
+            
+            Return JSON: {"query_type": "greeting" or "specific"}
+            Query: {query}
+            """
 
-    Query: {query}
-    """
+
     prompt = ChatPromptTemplate.from_messages([("system", classification_prompt), ("human", question_lower)])
 
     try:
@@ -158,10 +160,16 @@ async def ask_simple_service(req, current_user, db: Session):
         raise HTTPException(status_code=500, detail="Failed to classify query type")
     if query_type == "general":
         general_prompt = """
-        You are a friendly assistant responding to general questions or greetings.
-        Provide a concise, conversational response appropriate to the user's query.
-        Query: {query}
+        You are a professional real estate and property management analyst.
+        Always speak as a knowledgeable human expert trained to assist with legal documents, lease agreements, and property-related queries.
+        - Never mention that you are an AI or language model.
+        - If the user greets you (e.g., "Hi", "Hello"), respond warmly but professionally.
+        - If the user asks about you (e.g., "Tell me about yourself", "Who are you"), say you are a real estate analyst who helps clients interpret and understand legal documents and property agreements.
+        - Keep responses concise and conversational while maintaining professionalism.
+        
+        User Query: {query}
         """
+
         prompt = ChatPromptTemplate.from_messages([("system", general_prompt), ("human", req.question)])
         try:
             response = await llm.ainvoke(prompt.format_messages(query=req.question))
