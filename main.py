@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from app.models.models import Base
 from app.database.db import engine
-from app.router import admin_user_chat, auth, buildings, chatbot, dashborad, invite_user,  user_chat_bot,gen_lease
+from app.router import admin_user_chat, auth, buildings, chatbot, dashborad, feeedback, invite_user,  user_chat_bot,gen_lease
 from fastapi.staticfiles import StaticFiles
 
 
@@ -26,8 +26,6 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json"
 )
-
-
 
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
@@ -49,6 +47,7 @@ app.include_router(user_chat_bot.router, prefix="/user",tags=["Portfolio Chatbot
 app.include_router(admin_user_chat.router, prefix="/admin_user_chat", tags=["Data categories chatbot"])
 app.include_router(buildings.router, prefix="/building_operations", tags=["Building Operations"])
 app.include_router(chatbot.router, prefix="/chatbot", tags=["Building Chatbot"])
+app.include_router(feeedback.router,prefix="/feedback",tags=["feedback"])
 
 
 @app.on_event("startup")

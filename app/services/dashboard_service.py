@@ -6,7 +6,6 @@ from app.crud.dashborad import get_activity_summary_data, get_analytics_data, ge
 import json
 import re
 
-import os
 from dotenv import load_dotenv
 from app.utils.llm_client import llm
 from app.services.prompts import get_ai_insights_prompt, get_recent_questions_prompt, get_usage_trends_prompt
@@ -31,8 +30,8 @@ def get_activity_summary_service(db: Session, company_id: int, days: int):
         "session_activity_trend": result
     })
 
-def get_rag_metrics_service(db: Session, company_id: int):
-    return get_rag_metrics_data(db, company_id)
+async def get_rag_metrics_service(db: Session, company_id: int):
+    return await get_rag_metrics_data(db, company_id)
 
 def get_recent_questions_service(db: Session, company_id: int):
     return get_recent_questions_data(db, company_id)

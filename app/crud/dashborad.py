@@ -2,6 +2,13 @@ from sqlalchemy import func, union_all, select
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from app.models.models import OTP, Building, StandaloneFile, User, ChatSession, ChatHistory, UserLogin
+from app.services.prompts import build_feedback_classification_prompt
+
+
+from sqlalchemy import func
+from app.models.models import ChatHistory, User, UserLogin, UserFeedback
+from datetime import datetime
+from app.utils.llm_client import invoke_llm
 
 def get_stats_data(db: Session, company_id: int, last_24h: datetime):
     total_standalone = db.query(StandaloneFile).filter(StandaloneFile.company_id == company_id).count()
@@ -124,17 +131,39 @@ def get_activity_summary_data(db: Session, company_id: int, start_date: datetime
     ]
     return summary, result
 
-def get_rag_metrics_data(db: Session, company_id: int):
+
+
+async def classify_feedback_with_llm(feedback_list: list[str]):
+    """
+    Classifies a list of feedback strings using the global llm via invoke_llm.
+    """
+    if not feedback_list:
+        return []
+
+    prompt = build_feedback_classification_prompt(feedback_list)
+
+    try:
+        result = invoke_llm(prompt, expect_json=True, fallback={"feedback": ["neutral"] * len(feedback_list)})
+        feedback_labels = result.get("feedback", [])
+
+        # Ensure output length matches input
+        if len(feedback_labels) != len(feedback_list):
+            feedback_labels = ["neutral"] * len(feedback_list)
+
+        return feedback_labels
+    except Exception as e:
+        print(f"⚠️ LLM feedback classification failed: {e}")
+        return ["neutral"] * len(feedback_list)
+
+
+async def get_rag_metrics_data(db: Session, company_id: int):
     query = (
         db.query(ChatHistory)
         .join(User, ChatHistory.user_id == User.id)
         .filter(User.company_id == company_id)
     )
+
     total_queries = query.count() or 0
-    avg_response_time = query.with_entities(func.avg(ChatHistory.response_time)).scalar() or 0.0
-    avg_confidence = query.with_entities(func.avg(ChatHistory.confidence)).scalar() or 0.0
-    positive_feedback_count = query.filter(ChatHistory.feedback == "positive").count() or 0
-    positive_feedback_percent = (positive_feedback_count / total_queries * 100) if total_queries > 0 else 0
     chat_sessions = query.with_entities(func.count(func.distinct(ChatHistory.chat_session_id))).scalar() or 0
     active_users = query.with_entities(func.count(func.distinct(ChatHistory.user_id))).scalar() or 0
     total_logins = (
@@ -145,6 +174,34 @@ def get_rag_metrics_data(db: Session, company_id: int):
         or 0
     )
     platform_users = db.query(func.count(User.id)).filter(User.company_id == company_id).scalar() or 0
+
+    # Fetch all feedback for this company
+    feedback_entries = (
+        db.query(UserFeedback.feedback)
+        .filter(UserFeedback.company_id == company_id)
+        .filter(UserFeedback.feedback.isnot(None))
+        .all()
+    )
+    feedback_texts = [f[0] for f in feedback_entries if f[0]]
+
+    # Classify feedbacks using LLM
+    positive_feedback_count = 0
+    if feedback_texts:
+        classifications = await classify_feedback_with_llm(feedback_texts)
+        positive_feedback_count = sum(1 for c in classifications if c.lower() == "positive")
+
+    total_feedbacks = len(feedback_texts)
+    positive_feedback_percent = (positive_feedback_count / total_feedbacks * 100) if total_feedbacks > 0 else 0
+
+# Average response time in seconds & confidence
+    avg_response_time_sec = query.with_entities(func.avg(ChatHistory.response_time)).scalar() or 0.0
+    avg_confidence_fraction = query.with_entities(func.avg(ChatHistory.confidence)).scalar() or 0.0
+
+    # Convert
+    avg_response_time_ms = round(avg_response_time_sec * 1000, 2)  # seconds → ms
+    avg_confidence_percent = round(avg_confidence_fraction * 100, 2)  # fraction → %
+
+    # Later in return
     return {
         "dashboard_metrics": {
             "chat_sessions": chat_sessions,
@@ -152,8 +209,12 @@ def get_rag_metrics_data(db: Session, company_id: int):
             "total_logins": total_logins,
             "platform_users": platform_users,
         },
-        "avg_response_time_ms": round(avg_response_time, 2),
-        "avg_confidence": round(avg_confidence, 2),
+        "avg_response_time_ms": avg_response_time_ms,
+        "avg_confidence": avg_confidence_percent,
         "positive_feedback_percent": round(positive_feedback_percent, 2),
-        "total_queries": total_queries
+        "total_queries": total_queries,
+        "total_feedbacks": total_feedbacks,
+        "last_updated": datetime.utcnow().isoformat()
     }
+
+

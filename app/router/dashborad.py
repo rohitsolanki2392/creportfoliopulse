@@ -73,9 +73,10 @@ def get_activity_summary(
     return get_activity_summary_service(db, current_user.company_id, days)
 
 @router.get("/system_tracing")
-def get_rag_metrics(
+async def get_rag_metrics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     check_admin_permission(current_user)
-    return get_rag_metrics_service(db, current_user.company_id)
+    metrics = await get_rag_metrics_service(db, current_user.company_id)
+    return metrics
