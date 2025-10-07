@@ -256,3 +256,18 @@ class BuildingAccessRequest(Base):
     user = relationship("User", foreign_keys=[user_id])
     building = relationship("Building", foreign_keys=[building_id])
 
+
+class UserFeedback(Base):
+    __tablename__ = "user_feedback"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    feedback = Column(Text, nullable=False)
+    rating = Column(Integer, nullable=True)  # optional: 1–5 rating scale
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", foreign_keys=[user_id])
+    company = relationship("Company", foreign_keys=[company_id])
+
+

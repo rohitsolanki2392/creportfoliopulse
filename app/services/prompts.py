@@ -30,3 +30,19 @@ def get_recent_questions_prompt(question_texts):
         "questions": ["q1", "q2", "q3"]
     }}
     """
+
+
+def build_feedback_classification_prompt(feedback_list: list[str]) -> str:
+    feedback_texts = "\n".join([f"- {f}" for f in feedback_list if f])
+    prompt = f"""
+    You are analyzing customer feedback for a real estate platform.
+    Classify each feedback below as "positive", "neutral", or "negative".
+    Return only JSON in this format:
+    ```json
+    {{ "feedback": ["positive", "neutral", "positive", ...] }}
+    ```
+
+    Feedback list:
+    {feedback_texts}
+    """
+    return prompt.strip()

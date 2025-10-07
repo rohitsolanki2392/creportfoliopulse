@@ -114,8 +114,9 @@ async def upload_standalone_files_service(
     
     return uploaded_files
 
+import time
+import numpy as np
 async def ask_simple_service(req, current_user, db: Session):
-    # google_api_key = os.getenv("GOOGLE_API_KEY")
     if not google_api_key:
         raise HTTPException(500, "Google API key missing")
 
@@ -125,13 +126,8 @@ async def ask_simple_service(req, current_user, db: Session):
     logger.info(f"Received question: '{req.question}'")
 
     question_lower = req.question.lower().strip()
-
-    # llm = ChatGoogleGenerativeAI(
-    #     model="gemini-2.0-flash", google_api_key=google_api_key, temperature=0.2
-    # )
-
     classification_prompt = """
-    You are a professional real estate and property management analyst that classifies user queries into two categories: 'general' or 'specific'.
+    You are a helpful assistant that classifies user queries into two categories: 'general' or 'specific'.
     - 'general' queries include greetings(e.g., "Hello", "How are you?").
     - 'specific' queries are related to categorized files, inquiries about documents, or specific information (e.g., "What is in the lease agreement?", "Find details about the tenant contract").
     Based on the query, return a JSON object with a single key 'query_type' and a value of either 'general' or 'specific'.
@@ -139,7 +135,10 @@ async def ask_simple_service(req, current_user, db: Session):
 
     Query: {query}
     """
+
     prompt = ChatPromptTemplate.from_messages([("system", classification_prompt), ("human", question_lower)])
+
+    start_time = time.time()  # ⏱ start timer
 
     try:
         response = await llm.ainvoke(prompt.format_messages(query=question_lower))
@@ -150,13 +149,13 @@ async def ask_simple_service(req, current_user, db: Session):
 
         classification = json.loads(content)
         query_type = classification.get("query_type")
-
-        if query_type not in ["general", "specific"]:
-            logger.error(f"Invalid query type returned: {query_type}")
-            raise HTTPException(status_code=500, detail="Failed to classify query type")
     except Exception as e:
         logger.error(f"Failed to classify query: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to classify query type")
+
+    # Default confidence = 1.0 for general questions
+    confidence_score = 1.0  
+
     if query_type == "general":
         general_prompt = """
         You are a professional real estate and property management analyst responding to general questions or greetings.
@@ -170,7 +169,6 @@ async def ask_simple_service(req, current_user, db: Session):
         except Exception as e:
             logger.error(f"Failed to generate response for general query: {str(e)}")
             answer = "Hello! How can I assist you today?"
-
     else:
         try:
             query_emb = await get_embedding(req.question, google_api_key)
@@ -180,8 +178,6 @@ async def ask_simple_service(req, current_user, db: Session):
             if getattr(req, "building_id", None) and str(req.building_id).strip():
                 filter_metadata["building_id"] = str(req.building_id)
 
-            logger.info(f"Using Pinecone filter: {filter_metadata}")
-
             result = index.query(
                 vector=query_emb,
                 top_k=5,
@@ -190,21 +186,15 @@ async def ask_simple_service(req, current_user, db: Session):
             )
 
             if not result["matches"]:
-                logger.warning("No Pinecone matches found")
                 answer = "Information not available in documents"
-                return {
-                    "session_id": req.session_id,
-                    "question": req.question,
-                    "answer": answer,
-                    "source_file": None,
-                    "all_answers": [],
-                }
+                confidence_score = 0.0
             else:
-                for m in result["matches"]:
-                    logger.info(f"Match score: {m['score']}, Chunk: {m['metadata']['chunk'][:2000]}")
+                # ✅ Calculate average similarity score as confidence
+                scores = [m["score"] for m in result["matches"]]
+                confidence_score = float(np.mean(scores))
 
-                contexts = [match["metadata"]["chunk"] for match in result["matches"]]
-                combined_context = "\n\n".join(contexts) 
+                contexts = [m["metadata"]["chunk"] for m in result["matches"]]
+                combined_context = "\n\n".join(contexts)
 
                 system_prompt = """
                 You are an expert analyst specializing in lease agreements and property management.
@@ -227,9 +217,10 @@ async def ask_simple_service(req, current_user, db: Session):
             logger.error(f"Failed to search results: {str(e)}")
             raise HTTPException(status_code=500, detail="Failed to retrieve information from files")
 
-        if not answer:
-            answer = "I'm sorry, I couldn't find relevant information in your files."
-     
+    end_time = time.time()
+    response_time = round(end_time - start_time, 3)  # ⏱ total response time in seconds
+
+
     session = get_or_create_chat_session(db, req.session_id, current_user.id, req.category, current_user.company_id)
 
     save_chat_history(
@@ -240,17 +231,20 @@ async def ask_simple_service(req, current_user, db: Session):
         question=req.question,
         answer=answer,
         company_id=current_user.company_id,
-        response_json={"query_type": query_type, "answer": answer}
+        response_time=response_time,
+        confidence=confidence_score,
+        response_json={"query_type": query_type, "answer": answer, "confidence": confidence_score}
     )
 
     return {
         "session_id": req.session_id,
         "question": req.question,
         "answer": answer,
+        "confidence": confidence_score,
+        "response_time": response_time,
         "source_file": None,
         "all_answers": [],
     }
-
 
 async def list_simple_files_service(
     building_id: Optional[int],

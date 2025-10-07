@@ -95,7 +95,9 @@ def save_chat_history(
     answer: str,
     file_id: Optional[str] = None,
     response_json: Optional[dict] = None,
-    company_id: Optional[int] = None
+    company_id: Optional[int] = None,
+    response_time: Optional[float] = None,
+    confidence: Optional[float] = None
 ):
     chat_history = ChatHistory(
         chat_session_id=session_id,
@@ -105,7 +107,9 @@ def save_chat_history(
         answer=answer,
         response_json=response_json,
         company_id=company_id,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.utcnow(),
+        response_time=response_time,
+        confidence=confidence
     )
     db.add(chat_history)
     db.commit()
