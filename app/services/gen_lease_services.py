@@ -34,32 +34,6 @@ def format_lease_text(raw_text: str) -> str:
     text = text.replace('\t', '    ')
     return text.strip()
 
-# from typing import Dict, Any
-
-# def generate_lease_text(metadata: Dict[str, Any]) -> str:
-#     lease_text = LEASE_TEMPLATE
-#     try:
-#         # Replace placeholders with metadata values or defaults
-#         lease_text = lease_text.replace("[TENANT_NAME]", metadata.get('tenant_name', '[TENANT NAME]'))
-#         lease_text = lease_text.replace("[LANDLORD_NAME]", metadata.get('landlord_name', '[LANDLORD NAME]'))
-#         lease_text = lease_text.replace("[PROPERTY_ADDRESS]", metadata.get('property_address', '[PROPERTY ADDRESS]'))
-#         lease_text = lease_text.replace("[DATE]", f"{datetime.now().strftime('%B %d, %Y')}")
-#         lease_text = lease_text.replace("[SQUARE_FOOTAGE]", metadata.get('square_footage', '[SQUARE FOOTAGE]'))
-#         lease_text = lease_text.replace("[USE_CLAUSE]", metadata.get('use_clause', '[USE CLAUSE]'))
-#         lease_text = lease_text.replace("[COMMENCEMENT_DATE]", metadata.get('commencement_date', '[COMMENCEMENT DATE]'))
-#         lease_text = lease_text.replace("[EXPIRATION_DATE]", metadata.get('expiration_date', '[EXPIRATION DATE]'))
-#         lease_text = lease_text.replace("[BASE_ANNUAL_RENT]", metadata.get('rent_amount', '[BASE ANNUAL RENT]') or '[BASE ANNUAL RENT]')
-#         lease_text = lease_text.replace("[BASE_MONTHLY_RENT]", str(float(metadata.get('rent_amount', '0')) / 12) if metadata.get('rent_amount') else '[BASE MONTHLY RENT]')
-#         lease_text = lease_text.replace("[SECURITY_DEPOSIT]", metadata.get('security_deposit', '[SECURITY DEPOSIT]'))
-#         lease_text = lease_text.replace("[LEASE_TERM]", metadata.get('lease_term', '[LEASE TERM]'))
-#         lease_text = lease_text.replace("[TENANT_IMPROVEMENTS]", metadata.get('tenant_improvements', '[TENANT IMPROVEMENTS]'))
-#         lease_text = lease_text.replace("[ADDITIONAL_TERMS]", metadata.get('additional_terms', '[ADDITIONAL TERMS]'))
-#         lease_text = lease_text.replace("[BROKER]", metadata.get('broker', '[BROKER]') or '[BROKER]')
-#         lease_text = lease_text.replace("[GUARANTOR]", metadata.get('guarantor', '[GUARANTOR]') or '[GUARANTOR]')
-#     except Exception as e:
-#         print(f"Error processing metadata: {e}")
-#         lease_text = lease_text.replace("[ERROR]", f"Error processing metadata: {e}")
-#     return lease_text
 
 import json
 from typing import Dict, Any
@@ -96,12 +70,11 @@ def generate_lease_text(metadata: Dict[str, Any]) -> str:
 
         raw_text = response.text.strip()
 
-        # ✅ Remove Markdown code fences if present
+        
         if raw_text.startswith("```"):
             raw_text = raw_text.strip("`")
             raw_text = raw_text.replace("json", "", 1).strip()
 
-        # ✅ Safely parse JSON
         try:
             replacements = json.loads(raw_text)
         except Exception as json_error:
@@ -118,7 +91,6 @@ def generate_lease_text(metadata: Dict[str, Any]) -> str:
 
 def format_lease_text(lease_text: str) -> str:
     """Ensure consistent formatting of the lease text."""
-    # Remove extra newlines and ensure single spacing
     lines = [line.strip() for line in lease_text.split('\n') if line.strip()]
     return '\n'.join(lines)
 
