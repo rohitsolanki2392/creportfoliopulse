@@ -29,30 +29,98 @@ def save_lease_file(content: str, company_id: str, category: str, file_id: str) 
         raise HTTPException(status_code=500, detail=f"Failed to save lease file: {str(e)}")
 
 def format_lease_text(raw_text: str) -> str:
-    """
-    Preserves the structure of the lease template in plain text.
-    - Keeps headings on new lines
-    - Ensures index/table of contents spacing
-    - Collapses extra blank lines to single blank lines
-    """
     text = re.sub(r'\n{3,}', '\n\n', raw_text)
     text = re.sub(r'(\d+\.\s[A-Z][A-Z\s]+)', r'\n\1\n', text)
     text = text.replace('\t', '    ')
     return text.strip()
 
+# from typing import Dict, Any
+
+# def generate_lease_text(metadata: Dict[str, Any]) -> str:
+#     lease_text = LEASE_TEMPLATE
+#     try:
+#         # Replace placeholders with metadata values or defaults
+#         lease_text = lease_text.replace("[TENANT_NAME]", metadata.get('tenant_name', '[TENANT NAME]'))
+#         lease_text = lease_text.replace("[LANDLORD_NAME]", metadata.get('landlord_name', '[LANDLORD NAME]'))
+#         lease_text = lease_text.replace("[PROPERTY_ADDRESS]", metadata.get('property_address', '[PROPERTY ADDRESS]'))
+#         lease_text = lease_text.replace("[DATE]", f"{datetime.now().strftime('%B %d, %Y')}")
+#         lease_text = lease_text.replace("[SQUARE_FOOTAGE]", metadata.get('square_footage', '[SQUARE FOOTAGE]'))
+#         lease_text = lease_text.replace("[USE_CLAUSE]", metadata.get('use_clause', '[USE CLAUSE]'))
+#         lease_text = lease_text.replace("[COMMENCEMENT_DATE]", metadata.get('commencement_date', '[COMMENCEMENT DATE]'))
+#         lease_text = lease_text.replace("[EXPIRATION_DATE]", metadata.get('expiration_date', '[EXPIRATION DATE]'))
+#         lease_text = lease_text.replace("[BASE_ANNUAL_RENT]", metadata.get('rent_amount', '[BASE ANNUAL RENT]') or '[BASE ANNUAL RENT]')
+#         lease_text = lease_text.replace("[BASE_MONTHLY_RENT]", str(float(metadata.get('rent_amount', '0')) / 12) if metadata.get('rent_amount') else '[BASE MONTHLY RENT]')
+#         lease_text = lease_text.replace("[SECURITY_DEPOSIT]", metadata.get('security_deposit', '[SECURITY DEPOSIT]'))
+#         lease_text = lease_text.replace("[LEASE_TERM]", metadata.get('lease_term', '[LEASE TERM]'))
+#         lease_text = lease_text.replace("[TENANT_IMPROVEMENTS]", metadata.get('tenant_improvements', '[TENANT IMPROVEMENTS]'))
+#         lease_text = lease_text.replace("[ADDITIONAL_TERMS]", metadata.get('additional_terms', '[ADDITIONAL TERMS]'))
+#         lease_text = lease_text.replace("[BROKER]", metadata.get('broker', '[BROKER]') or '[BROKER]')
+#         lease_text = lease_text.replace("[GUARANTOR]", metadata.get('guarantor', '[GUARANTOR]') or '[GUARANTOR]')
+#     except Exception as e:
+#         print(f"Error processing metadata: {e}")
+#         lease_text = lease_text.replace("[ERROR]", f"Error processing metadata: {e}")
+#     return lease_text
+
+import json
+from typing import Dict, Any
+from google import genai
+
+client = genai.Client()
+
 def generate_lease_text(metadata: Dict[str, Any]) -> str:
     lease_text = LEASE_TEMPLATE
-    lease_text = lease_text.replace("_________________________________________________________________", metadata.get('tenant_name', '[TENANT NAME]'))
-    lease_text = lease_text.replace("_____ Main Street, Suite ____", metadata.get('property_address', '[PROPERTY ADDRESS]'))
-    lease_text = lease_text.replace("Dated:  ______________________", f"Dated: {datetime.now().strftime('%B %d, %Y')}")
-    lease_text = lease_text.replace("containing approximately ______________ square feet", f"containing approximately {metadata.get('square_footage', '[SQUARE FOOTAGE]')} square feet")
-    lease_text = lease_text.replace("as and for a ________________________________________________________________", f"as and for a {metadata.get('use_clause', '[USE]')}")
-    lease_text = lease_text.replace("commence on __________________ (“Commencement Date”)", f"commence on {metadata.get('commencement_date', '[COMMENCEMENT DATE]')} (“Commencement Date”)")
-    lease_text = lease_text.replace("end on _______________________________ (“Expiration Date”)", f"end on {metadata.get('expiration_date', '[EXPIRATION DATE]')} (“Expiration Date”)")
-    lease_text = lease_text.replace("a base annual rent of __________________ (“Base Annual Rent”)", f"a base annual rent of {metadata.get('rent_amount', '[RENT AMOUNT]')} (“Base Annual Rent”)")
-    lease_text = lease_text.replace("monthly installments of ______________________ per month (“Base Monthly Rent”)", f"monthly installments of {metadata.get('rent_amount', '[MONTHLY RENT]')} per month (“Base Monthly Rent”)")
-    lease_text = lease_text.replace("$________________", metadata.get('security_deposit', '[SECURITY DEPOSIT]'))
-    return format_lease_text(lease_text)
+    try:
+        prompt = f"""
+        You are an expert in lease document automation.
+        Analyze the following lease template and metadata, and determine which metadata keys should replace which placeholders.
+        Use your best judgment based on context (e.g., names, dates, addresses, terms).
+
+        Template:
+        {LEASE_TEMPLATE}
+
+        Metadata:
+        {metadata}
+
+        Return only a valid JSON mapping of placeholder to value. Example:
+        {{
+          "[TENANT_NAME]": "John Smith",
+          "[LANDLORD_NAME]": "ABC Properties",
+          "[PROPERTY_ADDRESS]": "123 Main St, New York"
+        }}
+        """
+
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
+
+        raw_text = response.text.strip()
+
+        # ✅ Remove Markdown code fences if present
+        if raw_text.startswith("```"):
+            raw_text = raw_text.strip("`")
+            raw_text = raw_text.replace("json", "", 1).strip()
+
+        # ✅ Safely parse JSON
+        try:
+            replacements = json.loads(raw_text)
+        except Exception as json_error:
+            print("Raw response from Gemini:", raw_text)
+            raise ValueError(f"Gemini returned invalid JSON: {json_error}")
+
+        for placeholder, value in replacements.items():
+            lease_text = lease_text.replace(placeholder, str(value or "N/A"))
+
+        return lease_text
+
+    except Exception as e:
+        return f"Error processing lease template with metadata: {e}"
+
+def format_lease_text(lease_text: str) -> str:
+    """Ensure consistent formatting of the lease text."""
+    # Remove extra newlines and ensure single spacing
+    lines = [line.strip() for line in lease_text.split('\n') if line.strip()]
+    return '\n'.join(lines)
 
 def save_file_metadata(
     db: Session,
@@ -70,7 +138,7 @@ def save_file_metadata(
         category=category,
         gcs_path=gcs_path,
         company_id=current_user.company_id,
-        uploaded_at=datetime.utcnow(),
+       uploaded_at=datetime.utcnow(),
         structured_metadata=structured_metadata
     )
     db.add(saved_file)
@@ -102,24 +170,35 @@ def extract_structured_metadata_with_llm(extracted_text: str) -> dict:
     try:
         model = GenerativeModel("gemini-2.0-flash")
         prompt = f"""
-        Extract the following information from this Letter of Intent (LOI) text and return it as a JSON object:
-        - tenant_name: Name of the tenant/lessee
-        - landlord_name: Name of the landlord/lessor
-        - property_address: Full address of the property
-        - lease_term: Duration of the lease
-        - rent_amount: Monthly rent amount
-        - square_footage: Size of the space in square feet
-        - commencement_date: Lease start date
-        - expiration_date: Lease end date
-        - security_deposit: Security deposit amount
-        - use_clause: Permitted use of the property
-        - tenant_improvements: Information about tenant improvements
-        - additional_terms: Any other important terms or conditions
-        Text: {extracted_text}
-        Return only valid JSON. Use null if not found.
-        """
+                    You are an AI legal document assistant. A user has uploaded a lease-related document 
+                    (e.g., Letter of Intent, lease agreement, or rental contract). 
+                    Your task is to carefully read and analyze the document,
+                    identify all important information, and extract it as key-value pairs in a JSON object.
+                Important:
+            - The document may vary in structure, wording, and content.
+            - Extract all relevant information for the lease, including but not limited to:
+                - Tenant and landlord information
+                - Property address and details
+                - Lease terms (duration, commencement and expiration dates)
+                - Financial terms (rent amount, security deposit, payment schedule)
+                - Property size, square footage
+                - Permitted use, tenant improvements
+                - Special clauses, rights, obligations, insurance, maintenance, renewal, penalties
+                - Any other important terms or conditions that affect the lease
+
+            Requirements:
+            - Return a **valid JSON object** with key-value pairs for all extracted information.
+            - Use `null` for any values not present.
+            - If you find additional important fields not listed above, include them as new keys.
+            - Ensure all extracted information is accurate and reflects the content of the document.
+
+            Document Text: {extracted_text}
+            """
+          
         response = model.generate_content(prompt)
+       
         text = response.text.strip()
+        print(text)
         json_match = re.search(r"\{.*\}", text, re.DOTALL)
         if json_match:
             try:

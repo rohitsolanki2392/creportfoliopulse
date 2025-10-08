@@ -138,7 +138,7 @@ async def ask_simple_service(req, current_user, db: Session):
 
     prompt = ChatPromptTemplate.from_messages([("system", classification_prompt), ("human", question_lower)])
 
-    start_time = time.time()  # ⏱ start timer
+    start_time = time.time()  
 
     try:
         response = await llm.ainvoke(prompt.format_messages(query=question_lower))
@@ -153,7 +153,6 @@ async def ask_simple_service(req, current_user, db: Session):
         logger.error(f"Failed to classify query: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to classify query type")
 
-    # Default confidence = 1.0 for general questions
     confidence_score = 1.0  
 
     if query_type == "general":
@@ -189,7 +188,7 @@ async def ask_simple_service(req, current_user, db: Session):
                 answer = "Information not available in documents"
                 confidence_score = 0.0
             else:
-                # ✅ Calculate average similarity score as confidence
+                
                 scores = [m["score"] for m in result["matches"]]
                 confidence_score = float(np.mean(scores))
 
@@ -218,7 +217,7 @@ async def ask_simple_service(req, current_user, db: Session):
             raise HTTPException(status_code=500, detail="Failed to retrieve information from files")
 
     end_time = time.time()
-    response_time = round(end_time - start_time, 3)  # ⏱ total response time in seconds
+    response_time = round(end_time - start_time, 3)  
 
 
     session = get_or_create_chat_session(db, req.session_id, current_user.id, req.category, current_user.company_id)
