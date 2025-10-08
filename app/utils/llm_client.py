@@ -24,7 +24,6 @@ def invoke_llm(prompt: str, expect_json: bool = True, fallback: dict = None):
         if not expect_json:
             return content
 
-        # Clean JSON if wrapped in code fences
         content = re.sub(r"^```(?:json)?|```$", "", content, flags=re.MULTILINE).strip()
         return json.loads(content)
 

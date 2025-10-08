@@ -18,7 +18,7 @@ from app.utils.process_file import save_to_temp, extract_text_from_file_using_ll
 import json
 from pydantic import BaseModel
 from typing import List
-from fastapi.responses import PlainTextResponse, FileResponse
+from fastapi.responses import PlainTextResponse
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
@@ -42,6 +42,8 @@ class UpdateTextRequest(BaseModel):
     
 
 
+from fastapi import HTTPException
+
 @router.post("/upload/simple")
 async def upload_file(
     file: UploadFile = File(...),
@@ -49,31 +51,30 @@ async def upload_file(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # Raise an HTTPException if the file is not a PDF
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Invalid file type. Only PDF files are allowed.")
+    
     try:
         logger.info(f"Uploading file {file.filename} for user {current_user.id}")
         
-        # Save to temp file
         temp_path = await save_to_temp(file, current_user.id, current_user, category)
         
-        # Extract plain text
         extracted_text = extract_text_from_file_using_llm(temp_path)
         if not extracted_text:
             raise ValueError("No text extracted from file")
         
-        # Extract structured metadata with LLM
         structured_metadata = extract_structured_metadata_with_llm(extracted_text) or {}
-        
-        # Save to DB
+
         saved_file = save_file_metadata(
             db,
             file,
-            gcs_path="",  # empty string to satisfy NOT NULL
+            gcs_path="",  
             category=category,
             current_user=current_user,
             structured_metadata=json.dumps(structured_metadata)
         )
 
-        # Delete temp file
         os.remove(temp_path)
         
         return {
@@ -88,6 +89,8 @@ async def upload_file(
         if 'temp_path' in locals() and os.path.exists(temp_path):
             os.remove(temp_path)
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
+
+
 
 @router.get("/files/structured_metadata")
 async def get_structured_metadata(
@@ -133,7 +136,6 @@ async def generate_lease_agreement_text(
             file_id=file_id
         )
 
-        # Save the generated lease text
         db_file = get_standalone_file(db, file_id)
         if not db_file:
             raise HTTPException(status_code=404, detail="File not found")
@@ -153,7 +155,6 @@ async def view_file_text(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Fetch file from DB
     db_file = db.query(StandaloneFile).filter(
         StandaloneFile.file_id == file_id,
         StandaloneFile.user_id == current_user.id
@@ -180,7 +181,7 @@ async def update_file_text(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Fetch file from DB
+
     db_file = db.query(StandaloneFile).filter(
         StandaloneFile.file_id == file_id,
         StandaloneFile.user_id == current_user.id
@@ -188,10 +189,9 @@ async def update_file_text(
     if not db_file:
         raise HTTPException(status_code=404, detail="File not found or not authorized")
 
-    # Determine file path
     file_path = os.path.join("uploads", str(current_user.company_id), "lease_gen", f"{file_id}.txt")
 
-    # Ensure the file exists
+
     if not os.path.exists(file_path):
         raise HTTPException(status_code=400, detail="No lease text file found to update")
 
@@ -229,10 +229,9 @@ async def update_metadata(
         db.commit()
         db.refresh(db_file)
 
-        # Regenerate lease text with updated metadata
+      
         lease_text = generate_lease_text(structured_metadata)
 
-        # Save regenerated text
         file_path = save_lease_file(
             content=lease_text,
             company_id=current_user.company_id,
@@ -276,7 +275,6 @@ async def delete_file(
         if db_file.user_id != current_user.id:
             raise HTTPException(status_code=403, detail="Not authorized to delete this file")
         
-        # Delete associated text file if it exists
         file_path = f"uploads/{current_user.company_id}/lease_gen/{file_id}.txt"
         if os.path.exists(file_path):
             os.remove(file_path)

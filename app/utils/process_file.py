@@ -8,14 +8,13 @@ import pinecone
 import google.generativeai as genai
 import pandas as pd
 from fastapi import HTTPException
-from docx.text.paragraph import Paragraph
 import os
 from google import genai
 import google.generativeai as gen
 import PyPDF2
-import docx
-from docx.table import Table
-from docx.text.paragraph import Paragraph
+import PyPDF2
+import pandas as pd
+
 
 
 logger = logging.getLogger(__name__)
@@ -41,13 +40,6 @@ async def save_to_temp(file, id, user, category) -> str:
         raise HTTPException(status_code=500, detail=f"Failed to save temp file: {str(e)}")
 
 
-
-
-
-
-
-import PyPDF2
-import pandas as pd
 
 
 
@@ -97,27 +89,12 @@ def guess_mime_type(file_path: str) -> str:
     ext = file_path.split(".")[-1].lower()
     if ext == "pdf":
         return "application/pdf"
-    elif ext == "docx":
-        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    elif ext == "xlsx":
-        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    elif ext == "csv":
-        return "text/csv"
-    elif ext == "txt":
-        return "text/plain"
     else:
-        return "application/octet-stream"
-
-
-
-
-
+        return "Invalid file type. Only PDF files are allowed."
+    
+    
 def extract_text_from_file_using_llm(file_path: str) -> str:
-    """
-    Extract text and tables from a file using Gemini.
-    - Returns extracted text as string
-    - Raises ValueError("Cannot process file: No text extracted") if fails
-    """
+
     try:
 
         uploaded_file = client.files.upload(file=file_path)  
