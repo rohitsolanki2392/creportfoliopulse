@@ -12,11 +12,7 @@ from app.schema.invite_schema import UserListResponse
 from app.utils.auth_utils import verify_password, get_password_hash, create_bearer_token
 from app.services.email_service import cleanup_expired_otps, generate_otp, send_otp_email
 import secrets
-
-UPLOAD_DIR = "uploads/profile_photos"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif"}
+from app.config import UPLOAD_DIR, ALLOWED_EXTENSIONS
 
 async def register_user_service(user, db: Session):
     cleanup_expired_otps()
@@ -60,19 +56,11 @@ async def register_user_service(user, db: Session):
 
 def login_user_service(login_data, db: Session):
     db_user = auth_crud.get_user_by_email(db, login_data.email)
-
     if not db_user or not verify_password(login_data.password, db_user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
+        raise HTTPException(status_code=401, detail="Invalid email or password")
 
     if not db_user.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account not verified. Please verify your email first."
-        )
+        raise HTTPException(status_code=403, detail="Account not verified. Please verify your email first.")
 
     token = create_bearer_token(db, db_user.id)
 
@@ -80,8 +68,8 @@ def login_user_service(login_data, db: Session):
         "message": "Login successful",
         "role": db_user.role.value if hasattr(db_user.role, "value") else db_user.role,
         "access_token": token,
+        "token_type": "bearer"  # ✅ added
     }
-
 async def forgot_password_service(data, db: Session, background_tasks: BackgroundTasks):
     cleanup_expired_otps()
     user = auth_crud.get_user_by_email(db, data.email)
@@ -127,64 +115,167 @@ def verify_otp_service(data, db: Session):
         return {"message": "Account verified! You can now login."}
     return {"message": "OTP verified"}
 
-async def update_user_profile_service(db: Session, current_user, name: str = None, number: str = None, photo: UploadFile = None, request: Request = None):
+# async def update_user_profile_service(db: Session, current_user, name: str = None, number: str = None, photo: UploadFile = None, request: Request = None):
+#     updated = False
+#     image_preview = None
+#     if name:
+#         current_user.name = name
+#         updated = True
+#     if number:
+#         current_user.number = number
+#         updated = True
+#     if photo:
+#         file_ext = os.path.splitext(photo.filename)[1].lower()
+#         if file_ext not in ALLOWED_EXTENSIONS:
+#             raise HTTPException(status_code=400, detail="Invalid file type. Only JPG, PNG, GIF allowed.")
+        
+#         file_bytes = await photo.read()
+#         if not file_bytes:
+#             raise HTTPException(status_code=400, detail="Uploaded file is empty")
+        
+#         new_filename = f"{uuid.uuid4().hex}{file_ext}"
+#         file_path = os.path.join(UPLOAD_DIR, new_filename)
+#         with open(file_path, "wb") as f:
+#             f.write(file_bytes)
+        
+        
+#         current_user.photo_url = f"/uploads/profile_photos/{new_filename}"  
+
+#         image_preview = f"data:{'image/jpeg' if file_ext in ['.jpg','.jpeg'] else f'image/{file_ext[1:]}' };base64,{base64.b64encode(file_bytes).decode('utf-8')}"
+#         updated = True
+
+
+#     if not updated:
+#         raise HTTPException(status_code=400, detail="No data provided for update")
+    
+#     db.add(current_user)
+#     db.commit()
+#     db.refresh(current_user)
+#     return current_user, image_preview
+
+
+async def update_user_profile_service(
+    db: Session,
+    current_user,
+    name: str = None,
+    number: str = None,
+    photo: UploadFile = None,
+    bg_photo: UploadFile = None,  # ✅ new param
+    request: Request = None
+):
     updated = False
     image_preview = None
+    bg_image_preview = None
+
+    # ✅ Name update
     if name:
         current_user.name = name
         updated = True
+
+    # ✅ Number update
     if number:
         current_user.number = number
         updated = True
+
+    # ✅ Profile photo update
     if photo:
         file_ext = os.path.splitext(photo.filename)[1].lower()
         if file_ext not in ALLOWED_EXTENSIONS:
             raise HTTPException(status_code=400, detail="Invalid file type. Only JPG, PNG, GIF allowed.")
-        
+
         file_bytes = await photo.read()
         if not file_bytes:
             raise HTTPException(status_code=400, detail="Uploaded file is empty")
-        
+
         new_filename = f"{uuid.uuid4().hex}{file_ext}"
         file_path = os.path.join(UPLOAD_DIR, new_filename)
+
         with open(file_path, "wb") as f:
             f.write(file_bytes)
-        
-        
-        current_user.photo_url = f"/uploads/profile_photos/{new_filename}"  
+
+        current_user.photo_url = f"/uploads/profile_photos/{new_filename}"
 
         image_preview = f"data:{'image/jpeg' if file_ext in ['.jpg','.jpeg'] else f'image/{file_ext[1:]}' };base64,{base64.b64encode(file_bytes).decode('utf-8')}"
         updated = True
 
+    # ✅ Background photo update
+    if bg_photo:
+        file_ext = os.path.splitext(bg_photo.filename)[1].lower()
+        if file_ext not in ALLOWED_EXTENSIONS:
+            raise HTTPException(status_code=400, detail="Invalid file type. Only JPG, PNG, GIF allowed.")
 
+        file_bytes = await bg_photo.read()
+        if not file_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded background image is empty")
+
+        new_filename = f"bg_{uuid.uuid4().hex}{file_ext}"
+        file_path = os.path.join(UPLOAD_DIR, new_filename)
+
+        with open(file_path, "wb") as f:
+            f.write(file_bytes)
+
+        current_user.bg_photo_url = f"/uploads/profile_photos/{new_filename}"
+
+        bg_image_preview = f"data:{'image/jpeg' if file_ext in ['.jpg','.jpeg'] else f'image/{file_ext[1:]}' };base64,{base64.b64encode(file_bytes).decode('utf-8')}"
+        updated = True
+
+    # ✅ No data case
     if not updated:
         raise HTTPException(status_code=400, detail="No data provided for update")
-    
+
     db.add(current_user)
     db.commit()
     db.refresh(current_user)
-    return current_user, image_preview
+
+    return current_user, image_preview, bg_image_preview
+import os
+import base64
 
 def get_user_profile_service(current_user):
     response = {
         "id": current_user.id,
         "name": current_user.name,
         "number": current_user.number,
+        "email": current_user.email,
+        "role": current_user.role,
         "photo_url": current_user.photo_url,
-        "photo_base64": None
+        "bg_photo_url": current_user.bg_photo_url,  # ✅ new
+        "photo_base64": None,
+        "bg_photo_base64": None  # ✅ new
     }
 
+    # ✅ Handle profile photo
     if current_user.photo_url:
         file_path = current_user.photo_url.replace("/uploads", "uploads")
         if os.path.exists(file_path):
             with open(file_path, "rb") as f:
                 file_bytes = f.read()
             file_ext = os.path.splitext(file_path)[1].lower()
-            mime_type = "image/jpeg" if file_ext in [".jpg", ".jpeg"] else "image/png" if file_ext == ".png" else "image/gif"
-            response["photo_base64"] = f"data:{mime_type};base64,{base64.b64encode(file_bytes).decode('utf-8')}"
-        else:
-            response["photo_base64"] = None
-    
+            mime_type = (
+                "image/jpeg" if file_ext in [".jpg", ".jpeg"]
+                else "image/png" if file_ext == ".png"
+                else "image/gif"
+            )
+            response["photo_base64"] = (
+                f"data:{mime_type};base64,{base64.b64encode(file_bytes).decode('utf-8')}"
+            )
+
+    # ✅ Handle background photo
+    if current_user.bg_photo_url:
+        file_path = current_user.bg_photo_url.replace("/uploads", "uploads")
+        if os.path.exists(file_path):
+            with open(file_path, "rb") as f:
+                file_bytes = f.read()
+            file_ext = os.path.splitext(file_path)[1].lower()
+            mime_type = (
+                "image/jpeg" if file_ext in [".jpg", ".jpeg"]
+                else "image/png" if file_ext == ".png"
+                else "image/gif"
+            )
+            response["bg_photo_base64"] = (
+                f"data:{mime_type};base64,{base64.b64encode(file_bytes).decode('utf-8')}"
+            )
+
     return response
 
 async def list_all_users_service(current_user: User, db: Session) -> List[UserListResponse]:

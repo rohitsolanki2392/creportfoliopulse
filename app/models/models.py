@@ -115,6 +115,7 @@ class User(Base):
     role = Column(String, default="user", nullable=False)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
     photo_url = Column(String, nullable=True)
+    bg_photo_url = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     buildings = relationship(
