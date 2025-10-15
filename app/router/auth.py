@@ -1,37 +1,65 @@
 
 
-from fastapi import APIRouter, Depends, BackgroundTasks,Request, status, Form, File, UploadFile
+from fastapi import APIRouter, Depends, BackgroundTasks,Request, Form, File, UploadFile
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.database.db import get_db
 from app.models.models import User
-from app.schema.auth_schema import ForgotPassword, OTPVerify, ResetPassword, Token, UserLogin, UserProfile, UserRegister
+from app.schema.auth_schema import ForgotPassword, OTPVerify, ResetPassword, Token, TokenResponse, UserLogin, UserProfile, UserRegister
 from app.services.invite_service import invite_service
 from app.utils.auth_utils import get_current_user
 from app.services import auth_service
 
 router = APIRouter()
 
+# @router.patch("/user/profile/update", response_model=UserProfile, tags=["Auth"])
+# async def update_user_profile(
+#     name: str = Form(None),
+#     number: str = Form(None),
+#     photo: UploadFile = File(None),
+#     db: Session = Depends(get_db),
+#     current_user: User = Depends(get_current_user),
+#     request: Request = None
+# ):
+#     updated_user, photo_base64 = await auth_service.update_user_profile_service(
+#         db=db,
+#         current_user=current_user,
+#         name=name,
+#         number=number,
+#         photo=photo,
+#         request=request
+#     )
+#     return {
+#         **UserProfile.from_orm(updated_user).dict(),
+#         "photo_base64": photo_base64
+#     }
+
 @router.patch("/user/profile/update", response_model=UserProfile, tags=["Auth"])
 async def update_user_profile(
     name: str = Form(None),
     number: str = Form(None),
     photo: UploadFile = File(None),
+    bg_photo: UploadFile = File(None),   # ✅ Added background photo input
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     request: Request = None
 ):
-    updated_user, photo_base64 = await auth_service.update_user_profile_service(
+    updated_user, photo_base64, bg_photo_base64 = await auth_service.update_user_profile_service(
         db=db,
         current_user=current_user,
         name=name,
         number=number,
         photo=photo,
+        bg_photo=bg_photo,   # ✅ pass to service
         request=request
     )
+
     return {
         **UserProfile.from_orm(updated_user).dict(),
-        "photo_base64": photo_base64
+        "photo_base64": photo_base64,
+        "bg_photo_base64": bg_photo_base64,  # ✅ include background image preview
     }
+
 
 @router.get("/user/profile", tags=["Auth"])
 async def get_user_profile(
@@ -43,9 +71,23 @@ async def get_user_profile(
 async def register_user(user: UserRegister,db: Session = Depends(get_db)):
     return await auth_service.register_user_service(user,db)
 
-@router.post("/login", response_model=Token, tags=["Auth"])
-async def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
+@router.post("/login", response_model=TokenResponse, tags=["Auth"])
+async def login_user(
+    form_data: UserLogin,  # for Postman and others
+    db: Session = Depends(get_db)
+):
+    # form_data.username -> email
+    login_data = UserLogin(email=form_data.email, password=form_data.password)
     return auth_service.login_user_service(login_data, db)
+
+# @router.post("/login", response_model=TokenResponse, tags=["Auth"])
+# async def login_user(
+#     form_data: OAuth2PasswordRequestForm = Depends(),  # for Swagger UI
+#     db: Session = Depends(get_db)
+# ):
+#     # form_data.username -> email
+#     login_data = UserLogin(email=form_data.username, password=form_data.password)
+#     return auth_service.login_user_service(login_data, db)
 
 @router.post("/forgot_password", tags=["Auth"])
 async def forgot_password(forgot_data: ForgotPassword, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):

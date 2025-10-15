@@ -1,17 +1,16 @@
 
 
-import os
 import smtplib
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
-
+from app.config import SMTP_SERVER,SMTP_PORT,EMAIL_SENDER,EMAIL_PASSWORD
 load_dotenv()
 
 def send_email(to_email: str, subject: str, body: str):
-    smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-    smtp_port = int(os.getenv("SMTP_PORT", 587))
-    sender_email = os.getenv("EMAIL_SENDER")
-    sender_password = os.getenv("EMAIL_PASSWORD")
+    smtp_server = SMTP_SERVER
+    smtp_port = SMTP_PORT
+    sender_email =EMAIL_SENDER
+    sender_password =EMAIL_PASSWORD
 
     if not sender_email or not sender_password:
         raise Exception("Missing EMAIL_SENDER or EMAIL_PASSWORD in environment variables")

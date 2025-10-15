@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Depends,UploadFile, File, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database.db import get_db

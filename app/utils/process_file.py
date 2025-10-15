@@ -5,21 +5,19 @@ import asyncio
 from typing import List, Optional, Union
 from app.utils.docx_extreactinon import extract_docx_text
 import pinecone
-import google.generativeai as genai
 import pandas as pd
 from fastapi import HTTPException
 import os
-from google import genai
+from app.config import api_key,index_name,dimension,cloud,region,model
 import google.generativeai as gen
 import PyPDF2
 import PyPDF2
 import pandas as pd
-
-
-
+from app.config import client
+from app.services.prompts import contents
 logger = logging.getLogger(__name__)
 
-client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+# client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 async def save_to_temp(file, id, user, category) -> str:
     company_id = user.company_id
@@ -40,9 +38,6 @@ async def save_to_temp(file, id, user, category) -> str:
         raise HTTPException(status_code=500, detail=f"Failed to save temp file: {str(e)}")
 
 
-
-
-
 def extract_text_from_file(file_path: str) -> str:
     ext = file_path.split('.')[-1].lower()
     
@@ -58,6 +53,7 @@ def extract_text_from_file(file_path: str) -> str:
         text = extract_docx_text(file_path)  # Call the existing extract_docx_text function
         if not text.strip():
             raise ValueError("Cannot process file: No text extracted")
+        print(text)
         return text
 
     elif ext == "xlsx":
@@ -83,8 +79,6 @@ def extract_text_from_file(file_path: str) -> str:
         raise ValueError("Unsupported file format")
 
 
-
-
 def guess_mime_type(file_path: str) -> str:
     ext = file_path.split(".")[-1].lower()
     if ext == "pdf":
@@ -94,29 +88,17 @@ def guess_mime_type(file_path: str) -> str:
     
     
 def extract_text_from_file_using_llm(file_path: str) -> str:
-
     try:
-
         uploaded_file = client.files.upload(file=file_path)  
-
-
         response = client.models.generate_content(
-            model="gemini-2.0-flash",   # or "gemini-1.5-flash"
+            model="gemini-2.0-flash",  
             contents=[
-                uploaded_file,
-                """You are an expert data extractor. Extract content from the given file, regardless of format: PDF, DOCX, TXT, CSV, or scanned image-based files. 
-                Requirements:
-                -If the file contains scanned images or PDFs, perform OCR to extract text accurately.
-                -Extract all text, headings, bullet points, numbers, formulas, and annotations.
-                -Preserve tables exactly as they appear in the file, keeping rows and columns intact in **markdown or CSV format**.
-                -For images, describe them briefly if they contain important information.
-                -Return only clean, structured content, without any unrelated metadata or formatting artifacts.
-                -Organize the output logically, preserving the original structure of the document as much as possible.
-                Output should be fully text-based, structured, and ready for further analysis or processing."""
+                uploaded_file,contents
+              
             ],
         )
 
-        # 3. Get output
+
         text = getattr(response, "text", "").strip()
         if not text:
             raise ValueError("Cannot process file: No text extracted")
@@ -135,7 +117,7 @@ async def get_embedding(texts: Union[str, List[str]], api_key: str, output_dim: 
         raise ValueError("No texts provided for embedding")
     
     gen.configure(api_key=api_key)
-    model = os.getenv("GEMINI_EMBEDDING_MODEL")
+    # model = os.getenv("GEMINI_EMBEDDING_MODEL")
     
     def embed_sync():
         result = gen.embed_content(
@@ -149,12 +131,9 @@ async def get_embedding(texts: Union[str, List[str]], api_key: str, output_dim: 
     embeddings = await asyncio.get_event_loop().run_in_executor(None, embed_sync)
     return embeddings
 
+
 def get_pinecone_index():
-    api_key = os.getenv("PINECONE_API_KEY")
-    index_name = os.getenv("PINECONE_INDEX")
-    dimension = os.getenv("EMBEDDING_DIMENSION")
-    cloud = os.getenv("PINECONE_CLOUD")
-    region = os.getenv("PINECONE_REGION")
+
     if not api_key:
         raise ValueError("PINECONE_API_KEY environment variable is not set")
     

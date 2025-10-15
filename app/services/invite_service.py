@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from app.models.models import User
 from app.utils.email import send_email
-from app.utils.security import get_password_hash
+from app.utils.auth_utils import get_password_hash
 from app.crud.auth_crud import create_user, get_user_by_email, create_company
 
 async def invite_service(
