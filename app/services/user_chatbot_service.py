@@ -23,6 +23,13 @@ from app.config import google_api_key
 from app.utils.process_file import get_pinecone_index, process_uploaded_file, save_to_temp
 from app.utils.llm_client import llm
 from app.config import SUPPORTED_EXT
+
+import re
+from typing import Optional
+
+import numpy as np
+from fastapi import HTTPException
+
 logger = logging.getLogger(__name__)
 
 def human_readable_size(size_in_bytes: int) -> str:
@@ -34,7 +41,7 @@ def human_readable_size(size_in_bytes: int) -> str:
 
 
 
-
+from app.services.prompts import classification_prompt, general_prompt, system_prompt
 async def upload_standalone_files_service(
     files, 
     category, 
@@ -111,9 +118,7 @@ async def upload_standalone_files_service(
     
     return uploaded_files
 
-import time
-import numpy as np
-from app.services.prompts import classification_prompt,general_prompt,system_prompt
+
 
 
 async def ask_simple_service(req, current_user, db: Session):
@@ -171,29 +176,21 @@ async def ask_simple_service(req, current_user, db: Session):
                 answer = "Information not available in documents"
                 confidence_score = 0.0
             else:
-                
                 scores = [m["score"] for m in result["matches"]]
                 confidence_score = float(np.mean(scores))
 
                 contexts = [m["metadata"]["chunk"] for m in result["matches"]]
                 combined_context = "\n\n".join(contexts)
 
-                system_prompt = """
-                You are an expert analyst specializing in lease agreements and property management.
-                Use the provided context to answer questions accurately and concisely.
-                - Reply politely if user greets you like hii, hello
-                - Focus on key details like dates, clauses, obligations, and financial terms
-                - Use bullet points for structured responses when appropriate
-                - If the question involves calculations, show your work
-                - Reference specific document sections when relevant
-                - Do not add information beyond the context
-                - Use the context to answer as best as you can.
-                - Maintain professional, neutral tone
-                Context: {context}
-                """
                 prompt = ChatPromptTemplate.from_messages([("system", system_prompt), ("human", req.question)])
                 response = await llm.ainvoke(prompt.format_messages(context=combined_context))
                 answer = response.content.strip()
+
+                # Post-process to fix formatting
+                answer = re.sub(r'\* (.*?)\n\s*(.*?)(?=\n|\Z)', r'* \1 - \2', answer, flags=re.DOTALL)
+                answer = re.sub(r'\n\s*\*', ' *', answer)
+                answer = re.sub(r'\n\s*(?=\*)', '', answer)
+                answer = re.sub(r'\n{2,}', '\n', answer)
 
         except Exception as e:
             logger.error(f"Failed to search results: {str(e)}")
@@ -201,7 +198,6 @@ async def ask_simple_service(req, current_user, db: Session):
 
     end_time = time.time()
     response_time = round(end_time - start_time, 3)  
-
 
     session = get_or_create_chat_session(db, req.session_id, current_user.id, req.category, current_user.company_id)
 
@@ -227,7 +223,6 @@ async def ask_simple_service(req, current_user, db: Session):
         "source_file": None,
         "all_answers": [],
     }
-
 async def list_simple_files_service(
     building_id: Optional[int],
     category: Optional[str],
