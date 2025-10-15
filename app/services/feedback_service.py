@@ -5,9 +5,6 @@ from app.crud.feedback_crud import create_feedback, get_company_feedback, get_us
 from app.schema.feedback_schema import FeedbackCreate, FeedbackResponse
 
 
-
-
-
 def submit_feedback_service(db: Session, current_user, feedback_data: FeedbackCreate):
     """
     Service for user feedback submission.

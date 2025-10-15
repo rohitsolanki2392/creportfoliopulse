@@ -1,37 +1,21 @@
 
+import secrets
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from typing import Optional
-from pydantic import BaseModel
-import os
+
 from dotenv import load_dotenv
 from app.crud import auth_crud
 from app.database.db import get_db
-from app.models.models import User
+from app.models.models import Token, User
 from app.crud.auth_crud import get_user_by_token
-
+from app.config import pwd_context,oauth2_scheme
 load_dotenv()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "x" * 32)
-ALGORITHM = "HS256"
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
-
-class TokenData(BaseModel):
-    email: Optional[str] = None
-    role: Optional[str] = None
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    try:
-        result = pwd_context.verify(plain_password, hashed_password)
-        print(f"[DEBUG] Password verification: {'SUCCESS' if result else 'FAILED'}")
-        return result
-    except Exception as e:
-        print(f"[DEBUG] Password verification error: {str(e)}")
-        return False
+    return pwd_context.verify(plain_password, hashed_password)
 
 def get_password_hash(password: str) -> str:
     try:
@@ -43,7 +27,11 @@ def get_password_hash(password: str) -> str:
         raise
 
 def create_bearer_token(db: Session, user_id: int) -> str:
-    return auth_crud.create_bearer_token(db, user_id)
+    token = secrets.token_urlsafe(32)
+    db_token = Token(token=token, user_id=user_id)
+    db.add(db_token)
+    db.commit()
+    return token
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     credentials_exception = HTTPException(
