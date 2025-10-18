@@ -12,27 +12,6 @@ from app.services import auth_service
 
 router = APIRouter()
 
-# @router.patch("/user/profile/update", response_model=UserProfile, tags=["Auth"])
-# async def update_user_profile(
-#     name: str = Form(None),
-#     number: str = Form(None),
-#     photo: UploadFile = File(None),
-#     db: Session = Depends(get_db),
-#     current_user: User = Depends(get_current_user),
-#     request: Request = None
-# ):
-#     updated_user, photo_base64 = await auth_service.update_user_profile_service(
-#         db=db,
-#         current_user=current_user,
-#         name=name,
-#         number=number,
-#         photo=photo,
-#         request=request
-#     )
-#     return {
-#         **UserProfile.from_orm(updated_user).dict(),
-#         "photo_base64": photo_base64
-#     }
 
 @router.patch("/user/profile/update", response_model=UserProfile, tags=["Auth"])
 async def update_user_profile(
@@ -76,7 +55,7 @@ async def login_user(
     form_data: UserLogin,  # for Postman and others
     db: Session = Depends(get_db)
 ):
-    # form_data.username -> email
+
     login_data = UserLogin(email=form_data.email, password=form_data.password)
     return auth_service.login_user_service(login_data, db)
 

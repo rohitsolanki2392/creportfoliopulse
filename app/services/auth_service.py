@@ -115,73 +115,33 @@ def verify_otp_service(data, db: Session):
         return {"message": "Account verified! You can now login."}
     return {"message": "OTP verified"}
 
-# async def update_user_profile_service(db: Session, current_user, name: str = None, number: str = None, photo: UploadFile = None, request: Request = None):
-#     updated = False
-#     image_preview = None
-#     if name:
-#         current_user.name = name
-#         updated = True
-#     if number:
-#         current_user.number = number
-#         updated = True
-#     if photo:
-#         file_ext = os.path.splitext(photo.filename)[1].lower()
-#         if file_ext not in ALLOWED_EXTENSIONS:
-#             raise HTTPException(status_code=400, detail="Invalid file type. Only JPG, PNG, GIF allowed.")
-        
-#         file_bytes = await photo.read()
-#         if not file_bytes:
-#             raise HTTPException(status_code=400, detail="Uploaded file is empty")
-        
-#         new_filename = f"{uuid.uuid4().hex}{file_ext}"
-#         file_path = os.path.join(UPLOAD_DIR, new_filename)
-#         with open(file_path, "wb") as f:
-#             f.write(file_bytes)
-        
-        
-#         current_user.photo_url = f"/uploads/profile_photos/{new_filename}"  
-
-#         image_preview = f"data:{'image/jpeg' if file_ext in ['.jpg','.jpeg'] else f'image/{file_ext[1:]}' };base64,{base64.b64encode(file_bytes).decode('utf-8')}"
-#         updated = True
-
-
-#     if not updated:
-#         raise HTTPException(status_code=400, detail="No data provided for update")
-    
-#     db.add(current_user)
-#     db.commit()
-#     db.refresh(current_user)
-#     return current_user, image_preview
-
-
 async def update_user_profile_service(
     db: Session,
     current_user,
     name: str = None,
     number: str = None,
     photo: UploadFile = None,
-    bg_photo: UploadFile = None,  # ✅ new param
+    bg_photo: UploadFile = None,
     request: Request = None
 ):
     updated = False
     image_preview = None
     bg_image_preview = None
 
-    # ✅ Name update
+
     if name:
         current_user.name = name
         updated = True
 
-    # ✅ Number update
     if number:
         current_user.number = number
         updated = True
 
-    # ✅ Profile photo update
+
     if photo:
         file_ext = os.path.splitext(photo.filename)[1].lower()
         if file_ext not in ALLOWED_EXTENSIONS:
-            raise HTTPException(status_code=400, detail="Invalid file type. Only JPG, PNG, GIF allowed.")
+            raise HTTPException(status_code=400, detail="clear type. Only JPG, PNG, GIF allowed.")
 
         file_bytes = await photo.read()
         if not file_bytes:
@@ -198,7 +158,7 @@ async def update_user_profile_service(
         image_preview = f"data:{'image/jpeg' if file_ext in ['.jpg','.jpeg'] else f'image/{file_ext[1:]}' };base64,{base64.b64encode(file_bytes).decode('utf-8')}"
         updated = True
 
-    # ✅ Background photo update
+
     if bg_photo:
         file_ext = os.path.splitext(bg_photo.filename)[1].lower()
         if file_ext not in ALLOWED_EXTENSIONS:
@@ -219,7 +179,7 @@ async def update_user_profile_service(
         bg_image_preview = f"data:{'image/jpeg' if file_ext in ['.jpg','.jpeg'] else f'image/{file_ext[1:]}' };base64,{base64.b64encode(file_bytes).decode('utf-8')}"
         updated = True
 
-    # ✅ No data case
+
     if not updated:
         raise HTTPException(status_code=400, detail="No data provided for update")
 
@@ -228,8 +188,7 @@ async def update_user_profile_service(
     db.refresh(current_user)
 
     return current_user, image_preview, bg_image_preview
-import os
-import base64
+
 
 def get_user_profile_service(current_user):
     response = {

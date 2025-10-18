@@ -1,8 +1,11 @@
+import json
 import os
+import re
 import uuid
 import logging
 import asyncio
 from typing import List, Optional, Union
+from app.utils.chunk import smart_chunk_text
 from app.utils.docx_extreactinon import extract_docx_text
 import pinecone
 import pandas as pd
@@ -13,11 +16,14 @@ import google.generativeai as gen
 import PyPDF2
 import PyPDF2
 import pandas as pd
-from app.config import client
-from app.services.prompts import contents
+import uuid
+from typing import Optional
+
+from app.utils.metadata import extract_metadata_llm
 logger = logging.getLogger(__name__)
 
-# client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+
+
 
 async def save_to_temp(file, id, user, category) -> str:
     company_id = user.company_id
@@ -53,7 +59,6 @@ def extract_text_from_file(file_path: str) -> str:
         text = extract_docx_text(file_path)  # Call the existing extract_docx_text function
         if not text.strip():
             raise ValueError("Cannot process file: No text extracted")
-        print(text)
         return text
 
     elif ext == "xlsx":
@@ -77,35 +82,6 @@ def extract_text_from_file(file_path: str) -> str:
 
     else:
         raise ValueError("Unsupported file format")
-
-
-def guess_mime_type(file_path: str) -> str:
-    ext = file_path.split(".")[-1].lower()
-    if ext == "pdf":
-        return "application/pdf"
-    else:
-        return "Invalid file type. Only PDF files are allowed."
-    
-    
-def extract_text_from_file_using_llm(file_path: str) -> str:
-    try:
-        uploaded_file = client.files.upload(file=file_path)  
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",  
-            contents=[
-                uploaded_file,contents
-              
-            ],
-        )
-
-
-        text = getattr(response, "text", "").strip()
-        if not text:
-            raise ValueError("Cannot process file: No text extracted")
-        return text
-
-    except Exception as e:
-        raise ValueError(f"Cannot process file: {e}")
 
 
 
@@ -157,42 +133,82 @@ def get_pinecone_index():
     
     return pc.Index(index_name)
 
-async def process_uploaded_file(file_path,  filename,  file_id,  google_api_key,  category,  company_id,building_id: Optional[int] = None ):
+
+async def process_uploaded_file(
+    file_path, filename, file_id, google_api_key, category, company_id,
+    building_id: Optional[int] = None
+):
+
     try:
+
         text = extract_text_from_file(file_path)
-
-        if not text:
-            logger.warning(f"No text extracted from {filename}")
+        if not text.strip():
+            logger.warning(f"No text extracted from file: {filename}")
             return
-        
-        chunk_size = 1000
-        overlap = 200
-        chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size - overlap)]
-        
+
+        metadata_info = await extract_metadata_llm(text)
+        logger.info(f"Extracted Metadata for {filename}: {metadata_info}")
+
+        tenant_name = metadata_info.get("tenant_name", "")
+        building = metadata_info.get("building", "")
+        floor = metadata_info.get("floor", "")
+
+        chunks = await smart_chunk_text(text, google_api_key)
+        if not chunks:
+            logger.warning(f"No chunks generated for file: {filename}")
+            return
+
         index = get_pinecone_index()
+        embeddings = await get_embedding(chunks, google_api_key)
+
         vectors = []
-        
-
-        if chunks:
-            embeddings = await get_embedding(chunks, google_api_key)  
-            vectors = []
-            for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
-                vector_id = f"{uuid.uuid4()}"
-                metadata = {
-                    "file_id": file_id,
-                    "category": category,
-                    "company_id": str(company_id),
-                    "building_id": str(building_id) if building_id is not None else "",  
-                    "total_chunks": len(chunks),
-                    "chunk": chunk
-                }
-
-                vectors.append((vector_id, embedding, metadata))
+        for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+            vector_id = str(uuid.uuid4())
+            metadata = {
+                "file_id": str(file_id),
+                "file_name": filename,
+                "company_id": str(company_id),
+                "category": category,
+                "building_id": str(building_id) if building_id else "",
+                "tenant_name": tenant_name,
+                "building": building,
+                "floor": floor,
+                "chunk": chunk,
+                "total_chunks": len(chunks)
+            }
+            vectors.append((vector_id, embedding, metadata))
         if vectors:
             index.upsert(vectors=vectors)
-            logger.info(f"Upserted {len(vectors)} vectors for file {file_id}")
+            logger.info(f" Upserted {len(vectors)} vectors for file {filename} ({file_id})")
+        else:
+            logger.warning(f"No vectors to upsert for {filename}")
+
     except Exception as e:
-        logger.error(f"Failed to process and upsert file {file_id}: {str(e)}")
+        logger.error(f" Failed to process {filename} ({file_id}): {str(e)}")
         raise
 
 
+async def extract_search_entities(question: str, google_api_key: str):
+    """
+    Use LLM to extract potential tenant_name, building, floor from a natural question.
+    """
+    from langchain.prompts import ChatPromptTemplate
+    from langchain.chat_models import ChatVertexAI  # or your llm object
+
+
+    try:
+        llm_extractor = ChatVertexAI(model="gemini-1.5-flash", temperature=0, api_key=google_api_key)
+        response = await llm_extractor.ainvoke(extraction_prompt.format_messages())
+        content = response.content.strip()
+        json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.DOTALL)
+        if json_match:
+            content = json_match.group(1)
+        entities = json.loads(content)
+        return {
+            "tenant_name": entities.get("tenant_name", "").strip().lower(),
+            "building": entities.get("building", "").strip().lower(),
+            "floor": entities.get("floor", "").strip().lower(),
+        }
+    except Exception as e:
+        logger.warning(f"Entity extraction failed: {e}")
+        return {"tenant_name": "", "building": "", "floor": ""}

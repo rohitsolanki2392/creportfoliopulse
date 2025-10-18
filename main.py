@@ -20,7 +20,6 @@ def create_db_and_tables():
 app = FastAPI(
     title="Building Management API",
     version="1.0.0",
-    timeout=300,
     description="API for managing buildings, leases, and user interactions with chatbots.",
     docs_url="/docs",
     redoc_url="/redoc",

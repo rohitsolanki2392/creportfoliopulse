@@ -44,15 +44,6 @@ class ResetPassword(BaseModel):
     new_password: str
     confirm_password: str
 
-# class UserProfile(BaseModel):
-#     id: int
-#     name: str
-#     number: str
-#     email: str
-#     role: str
-#     photo_url: Optional[str] = None
-#     photo_base64: Optional[str] = None
-#     model_config = ConfigDict(from_attributes=True)
 
 class UserProfile(BaseModel):
     id: int

@@ -1,7 +1,9 @@
 
 import re
+import time
 from typing import Optional
 from fastapi import HTTPException
+import numpy as np
 from sqlalchemy.orm import Session
 from langchain_core.prompts import ChatPromptTemplate
 from app.crud.user_chatbot_crud import get_or_create_chat_session, save_chat_history, save_standalone_file
@@ -22,14 +24,8 @@ from app.models.models import StandaloneFile
 from app.config import google_api_key
 from app.utils.process_file import get_pinecone_index, process_uploaded_file, save_to_temp
 from app.utils.llm_client import llm
+from app.services.prompts import classification_prompt, general_prompt, system_prompt
 from app.config import SUPPORTED_EXT
-
-import re
-from typing import Optional
-
-import numpy as np
-from fastapi import HTTPException
-
 logger = logging.getLogger(__name__)
 
 def human_readable_size(size_in_bytes: int) -> str:
@@ -41,7 +37,7 @@ def human_readable_size(size_in_bytes: int) -> str:
 
 
 
-from app.services.prompts import classification_prompt, general_prompt, system_prompt
+
 async def upload_standalone_files_service(
     files, 
     category, 
@@ -51,11 +47,7 @@ async def upload_standalone_files_service(
 ):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only admins can upload categorized files")
-        
-
-
     company_id = current_user.company_id
-
 
     uploaded_files = []
 
@@ -104,7 +96,6 @@ async def upload_standalone_files_service(
                 "gcs_path": unique_filename,  
                 "building_id": str(building_id) if building_id is not None else "",
             })
-            
             logger.info(f"Successfully processed {file.filename}")
         
         except Exception as e:
@@ -118,89 +109,80 @@ async def upload_standalone_files_service(
     
     return uploaded_files
 
+import time
+import re
+import json
+import numpy as np
+import google.generativeai as gen
+from fastapi import HTTPException
 
 
+gen.configure(api_key=google_api_key)
 
-async def ask_simple_service(req, current_user, db: Session):
+async def ask_simple_service(req, current_user, db):
     if not google_api_key:
         raise HTTPException(500, "Google API key missing")
 
     if not req.question.strip():
         raise HTTPException(400, "Question cannot be empty")
-    logger.info(f"Received question: '{req.question}'")
-    question_lower = req.question.lower().strip()
-    prompt = ChatPromptTemplate.from_messages([("system", classification_prompt), ("human", question_lower)])
 
-    start_time = time.time()  
+    logger.info(f"Received question: '{req.question}'")
+    start_time = time.time()
 
     try:
-        response = await llm.ainvoke(prompt.format_messages(query=question_lower))
-        content = response.content.strip()
-        json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.DOTALL)
-        if json_match:
-            content = json_match.group(1)
+        query_emb = await get_embedding(req.question, google_api_key)
+        index = get_pinecone_index()
 
-        classification = json.loads(content)
-        query_type = classification.get("query_type")
+        # ✅ Build dynamic metadata filter
+        filter_metadata = {"company_id": str(current_user.company_id)}
+        optional_filters = {
+            "category": getattr(req, "category", None),
+            "tenant_name": getattr(req, "tenant_name", None),
+            "floor": getattr(req, "floor", None),
+            "building_id": getattr(req, "building_id", None),
+        }
+        for key, value in optional_filters.items():
+            if value and str(value).strip():
+                filter_metadata[key] = str(value)
+
+        logger.info(f"Applying Pinecone filter: {filter_metadata}")
+
+        result = index.query(
+            vector=query_emb,
+            top_k=6,
+            include_metadata=True,
+            filter=filter_metadata,
+        )
+
+        if not result["matches"]:
+            answer = "The information is not available in the provided documents."
+            confidence_score = 0.0
+        else:
+            scores = [m["score"] for m in result["matches"]]
+            confidence_score = float(np.mean(scores))
+            contexts = [m["metadata"]["chunk"] for m in result["matches"]]
+            combined_context = "\n\n".join(contexts)
+
+   
+            if len(combined_context) > 9000:
+                combined_context = combined_context[:9000]
+
+
+            prompt = system_prompt.format(context=combined_context, query=req.question)
+
+            model = gen.GenerativeModel("gemini-2.0-flash")
+            response = model.generate_content(prompt)
+            answer = response.text.strip() if response and response.text else "No answer generated."
+
     except Exception as e:
-        logger.error(f"Failed to classify query: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to classify query type")
-
-    confidence_score = 1.0  
-
-    if query_type == "general":
-        prompt = ChatPromptTemplate.from_messages([("system", general_prompt), ("human", req.question)])
-        try:
-            response = await llm.ainvoke(prompt.format_messages(query=req.question))
-            answer = response.content.strip()
-        except Exception as e:
-            logger.error(f"Failed to generate response for general query: {str(e)}")
-            answer = "Hello! How can I assist you today?"
-    else:
-        try:
-            query_emb = await get_embedding(req.question, google_api_key)
-            index = get_pinecone_index()
-
-            filter_metadata = {"category": req.category, "company_id": str(current_user.company_id)}
-            if getattr(req, "building_id", None) and str(req.building_id).strip():
-                filter_metadata["building_id"] = str(req.building_id)
-
-            result = index.query(
-                vector=query_emb,
-                top_k=5,
-                include_metadata=True,
-                filter=filter_metadata
-            )
-
-            if not result["matches"]:
-                answer = "Information not available in documents"
-                confidence_score = 0.0
-            else:
-                scores = [m["score"] for m in result["matches"]]
-                confidence_score = float(np.mean(scores))
-
-                contexts = [m["metadata"]["chunk"] for m in result["matches"]]
-                combined_context = "\n\n".join(contexts)
-
-                prompt = ChatPromptTemplate.from_messages([("system", system_prompt), ("human", req.question)])
-                response = await llm.ainvoke(prompt.format_messages(context=combined_context))
-                answer = response.content.strip()
-
-                # Post-process to fix formatting
-                answer = re.sub(r'\* (.*?)\n\s*(.*?)(?=\n|\Z)', r'* \1 - \2', answer, flags=re.DOTALL)
-                answer = re.sub(r'\n\s*\*', ' *', answer)
-                answer = re.sub(r'\n\s*(?=\*)', '', answer)
-                answer = re.sub(r'\n{2,}', '\n', answer)
-
-        except Exception as e:
-            logger.error(f"Failed to search results: {str(e)}")
-            raise HTTPException(status_code=500, detail="Failed to retrieve information from files")
-
+        logger.error(f" Failed to search results: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve information from documents")
     end_time = time.time()
-    response_time = round(end_time - start_time, 3)  
+    response_time = round(end_time - start_time, 3)
 
-    session = get_or_create_chat_session(db, req.session_id, current_user.id, req.category, current_user.company_id)
-
+    session = get_or_create_chat_session(
+        db, req.session_id, current_user.id, req.category, current_user.company_id
+    )
     save_chat_history(
         db=db,
         session_id=session.id,
@@ -211,7 +193,10 @@ async def ask_simple_service(req, current_user, db: Session):
         company_id=current_user.company_id,
         response_time=response_time,
         confidence=confidence_score,
-        response_json={"query_type": query_type, "answer": answer, "confidence": confidence_score}
+        response_json={
+            "answer": answer,
+            "confidence": confidence_score,
+        },
     )
 
     return {
@@ -220,8 +205,6 @@ async def ask_simple_service(req, current_user, db: Session):
         "answer": answer,
         "confidence": confidence_score,
         "response_time": response_time,
-        "source_file": None,
-        "all_answers": [],
     }
 async def list_simple_files_service(
     building_id: Optional[int],
@@ -345,11 +328,7 @@ async def delete_simple_file_service(
     current_user,
     db: Session
 ):
-    """
-    Delete a standalone file from DB, Pinecone, and optionally local storage
-    based on file_id (+ optional building_id, category).
-    Checks if the current user has permission to delete the file.
-    """
+
 
     query = db.query(StandaloneFile).filter(StandaloneFile.file_id == file_id)
 

@@ -2,14 +2,25 @@
 import logging
 import os
 import json
-import re
+
 from typing import Dict, Any
+import uuid
+from docx import Document
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
-from app.crud.user_chatbot_crud import get_standalone_file
 from app.models.models import StandaloneFile, User
 from datetime import datetime
-from google.generativeai import GenerativeModel
+
+from app.services.prompts import lease_abstract_prompt
+import json
+from typing import Dict, Any
+from google import genai
+import os
+from sqlalchemy.orm import Session
+from fastapi import HTTPException
+from app.models.models import StandaloneFile
+client = genai.Client()
+from app.utils.process_file import extract_text_from_file, save_to_temp
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -28,44 +39,9 @@ def save_lease_file(content: str, company_id: str, category: str, file_id: str) 
         logger.error(f"Error saving lease file {file_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to save lease file: {str(e)}")
 
-def format_lease_text(raw_text: str) -> str:
-    text = re.sub(r'\n{3,}', '\n\n', raw_text)
-    text = re.sub(r'(\d+\.\s[A-Z][A-Z\s]+)', r'\n\1\n', text)
-    text = text.replace('\t', '    ')
-    return text.strip()
 
-# from typing import Dict, Any
 
-# def generate_lease_text(metadata: Dict[str, Any]) -> str:
-#     lease_text = LEASE_TEMPLATE
-#     try:
-#         # Replace placeholders with metadata values or defaults
-#         lease_text = lease_text.replace("[TENANT_NAME]", metadata.get('tenant_name', '[TENANT NAME]'))
-#         lease_text = lease_text.replace("[LANDLORD_NAME]", metadata.get('landlord_name', '[LANDLORD NAME]'))
-#         lease_text = lease_text.replace("[PROPERTY_ADDRESS]", metadata.get('property_address', '[PROPERTY ADDRESS]'))
-#         lease_text = lease_text.replace("[DATE]", f"{datetime.now().strftime('%B %d, %Y')}")
-#         lease_text = lease_text.replace("[SQUARE_FOOTAGE]", metadata.get('square_footage', '[SQUARE FOOTAGE]'))
-#         lease_text = lease_text.replace("[USE_CLAUSE]", metadata.get('use_clause', '[USE CLAUSE]'))
-#         lease_text = lease_text.replace("[COMMENCEMENT_DATE]", metadata.get('commencement_date', '[COMMENCEMENT DATE]'))
-#         lease_text = lease_text.replace("[EXPIRATION_DATE]", metadata.get('expiration_date', '[EXPIRATION DATE]'))
-#         lease_text = lease_text.replace("[BASE_ANNUAL_RENT]", metadata.get('rent_amount', '[BASE ANNUAL RENT]') or '[BASE ANNUAL RENT]')
-#         lease_text = lease_text.replace("[BASE_MONTHLY_RENT]", str(float(metadata.get('rent_amount', '0')) / 12) if metadata.get('rent_amount') else '[BASE MONTHLY RENT]')
-#         lease_text = lease_text.replace("[SECURITY_DEPOSIT]", metadata.get('security_deposit', '[SECURITY DEPOSIT]'))
-#         lease_text = lease_text.replace("[LEASE_TERM]", metadata.get('lease_term', '[LEASE TERM]'))
-#         lease_text = lease_text.replace("[TENANT_IMPROVEMENTS]", metadata.get('tenant_improvements', '[TENANT IMPROVEMENTS]'))
-#         lease_text = lease_text.replace("[ADDITIONAL_TERMS]", metadata.get('additional_terms', '[ADDITIONAL TERMS]'))
-#         lease_text = lease_text.replace("[BROKER]", metadata.get('broker', '[BROKER]') or '[BROKER]')
-#         lease_text = lease_text.replace("[GUARANTOR]", metadata.get('guarantor', '[GUARANTOR]') or '[GUARANTOR]')
-#     except Exception as e:
-#         print(f"Error processing metadata: {e}")
-#         lease_text = lease_text.replace("[ERROR]", f"Error processing metadata: {e}")
-#     return lease_text
 
-import json
-from typing import Dict, Any
-from google import genai
-
-client = genai.Client()
 
 def generate_lease_text(metadata: Dict[str, Any]) -> str:
     lease_text = LEASE_TEMPLATE
@@ -116,112 +92,115 @@ def generate_lease_text(metadata: Dict[str, Any]) -> str:
     except Exception as e:
         return f"Error processing lease template with metadata: {e}"
 
-def format_lease_text(lease_text: str) -> str:
-    """Ensure consistent formatting of the lease text."""
-    # Remove extra newlines and ensure single spacing
-    lines = [line.strip() for line in lease_text.split('\n') if line.strip()]
-    return '\n'.join(lines)
 
-def save_file_metadata(
-    db: Session,
-    file,
-    gcs_path: str,
-    category: str,
-    current_user: User,
-    structured_metadata: str
-) -> StandaloneFile:
-    from uuid import uuid4
-    saved_file = StandaloneFile(
-        file_id=str(uuid4()),
-        original_file_name=file.filename,
-        user_id=current_user.id,
-        category=category,
-        gcs_path=gcs_path,
-        company_id=current_user.company_id,
-       uploaded_at=datetime.utcnow(),
-        structured_metadata=structured_metadata
-    )
-    db.add(saved_file)
-    db.commit()
-    db.refresh(saved_file)
-    return saved_file
 
-async def list_category_files_service(current_user: User, db: Session, category: str):
-    files = db.query(StandaloneFile).filter(
-        StandaloneFile.user_id == current_user.id,
-        StandaloneFile.category == category,
-    ).all()
-    result = []
-    for file in files:
-        result.append({
-            "file_id": file.file_id,
-            "original_file_name": file.original_file_name,
-            "user_id": file.user_id,
-            "uploaded_at": file.uploaded_at.isoformat(),
-            "category": file.category,
-        })
-    return {
-        "category": category,
-        "files": result,
-        "total_files": len(result),
-    }
+async def process_lease_abstract(file, current_user, category: str, db: Session):
 
-def extract_structured_metadata_with_llm(extracted_text: str) -> dict:
     try:
-        model = GenerativeModel("gemini-2.0-flash")
-        prompt = f"""
-                    You are an AI legal document assistant. A user has uploaded a lease-related document 
-                    (e.g., Letter of Intent, lease agreement, or rental contract). 
-                    Your task is to carefully read and analyze the document,
-                    identify all important information, and extract it as key-value pairs in a JSON object.
-                Important:
-            - The document may vary in structure, wording, and content.
-            - Extract all relevant information for the lease, including but not limited to:
-                - Tenant and landlord information
-                - Property address and details
-                - Lease terms (duration, commencement and expiration dates)
-                - Financial terms (rent amount, security deposit, payment schedule)
-                - Property size, square footage
-                - Permitted use, tenant improvements
-                - Special clauses, rights, obligations, insurance, maintenance, renewal, penalties
-                - Any other important terms or conditions that affect the lease
+ 
+        temp_path = await save_to_temp(file, current_user.id, current_user, category)
+        extracted_text = extract_text_from_file(temp_path)
+        if not extracted_text:
+            raise HTTPException(400, "No text extracted from file")
 
-            Requirements:
-            - Return a **valid JSON object** with key-value pairs for all extracted information.
-            - Use `null` for any values not present.
-            - If you find additional important fields not listed above, include them as new keys.
-            - Ensure all extracted information is accurate and reflects the content of the document.
+        prompt = lease_abstract_prompt + "\n\nLEASE TEXT:\n" + extracted_text
+        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+        abstract_text = response.text.strip()
 
-            Document Text: {extracted_text}
-            """
-          
-        response = model.generate_content(prompt)
-       
-        text = response.text.strip()
-        print(text)
-        json_match = re.search(r"\{.*\}", text, re.DOTALL)
-        if json_match:
-            try:
-                metadata = json.loads(json_match.group())
-                if isinstance(metadata, dict):
-                    return metadata
-            except json.JSONDecodeError:
-                logger.error("LLM returned malformed JSON")
-        logger.error(f"LLM did not return valid JSON, response: {text[:500]}")
-        return {}
+
+        doc = Document()
+        doc.add_heading("Commercial Office Lease Abstract", level=1)
+        for line in abstract_text.split("\n"):
+            if line.strip():
+                if line.startswith(("I.", "II.", "III.")):
+                    doc.add_heading(line.strip(), level=2)
+                else:
+                    doc.add_paragraph(line.strip())
+
+        base_dir = os.path.join("uploads", str(current_user.company_id), category)
+        os.makedirs(base_dir, exist_ok=True)
+        output_name = f"lease_abstract_{uuid.uuid4().hex}.docx"
+        output_path = os.path.join(base_dir, output_name)
+        doc.save(output_path)
+
+
+        file_size = os.path.getsize(output_path)
+        new_file = StandaloneFile(
+            file_id=str(uuid.uuid4()),
+            original_file_name=file.filename,
+            user_id=current_user.id,
+            company_id=current_user.company_id,
+            category=category,
+            uploaded_at=datetime.utcnow(),
+            gcs_path=output_path, 
+            file_size=str(file_size),
+        )
+        db.add(new_file)
+        db.commit()
+        db.refresh(new_file)
+
+        return output_path
+
     except Exception as e:
-        logger.error(f"LLM extraction failed: {str(e)}")
-        return {}
+        logger.error(f"Error processing lease abstract: {e}")
+        raise HTTPException(500, f"Failed to process file: {e}")
 
-def get_file_info_service(db: Session, file_id: str) -> dict:
-    db_file = get_standalone_file(db, file_id)
-    if not db_file:
-        return {"success": False}
-    return {
-        "file_id": db_file.file_id,
-        "original_file_name": db_file.original_file_name,
-        "category": db_file.category,
-        "uploaded_at": db_file.uploaded_at,
-        "structured_metadata": json.loads(db_file.structured_metadata) if db_file.structured_metadata else {},
-        "success": True
-    }
+
+
+
+
+
+async def list_category_files_service(user_id: str, category: str, db: Session):
+    try:
+        files = db.query(StandaloneFile).filter(
+            StandaloneFile.user_id == user_id,
+            StandaloneFile.category == category,
+        ).all()
+
+        result = []
+        for file in files:
+            # Convert local path to web URL
+            normalized_path = file.gcs_path.replace("\\", "/")
+            full_url = f"/{normalized_path}"
+
+            result.append({
+                "file_id": file.file_id,
+                "original_file_name": file.original_file_name,
+                "user_id": file.user_id,
+                "uploaded_at": file.uploaded_at.isoformat(),
+                "category": file.category,
+                "file_url": full_url  # <-- changed from file_path to file_url
+            })
+
+        return {
+            "category": category,
+            "files": result,
+            "total_files": len(result),
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+
+async def delete_file_service(file_id: str, user_id: str, db: Session):
+    try:
+        file_record = db.query(StandaloneFile).filter(
+            StandaloneFile.file_id == file_id,
+            StandaloneFile.user_id == user_id,
+        ).first()
+
+        if not file_record:
+            raise HTTPException(status_code=404, detail="File not found")
+
+        # Delete local file if exists
+        if os.path.exists(file_record.gcs_path):
+            os.remove(file_record.gcs_path)
+
+        db.delete(file_record)
+        db.commit()
+
+        return {"message": f"File '{file_record.original_file_name}' deleted successfully"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
