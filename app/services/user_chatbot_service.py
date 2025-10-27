@@ -23,8 +23,7 @@ from datetime import datetime
 from app.models.models import StandaloneFile
 from app.config import google_api_key
 from app.utils.process_file import get_pinecone_index, process_uploaded_file, save_to_temp
-from app.utils.llm_client import llm
-from app.services.prompts import classification_prompt, general_prompt, system_prompt
+from app.services.prompts import  CLASSIFICATION_PROMPT, GENERAL_PROMPT_TEMPLATE, system_prompt
 from app.config import SUPPORTED_EXT
 logger = logging.getLogger(__name__)
 
@@ -119,70 +118,85 @@ from fastapi import HTTPException
 
 gen.configure(api_key=google_api_key)
 
+
+
 async def ask_simple_service(req, current_user, db):
     if not google_api_key:
         raise HTTPException(500, "Google API key missing")
-
     if not req.question.strip():
         raise HTTPException(400, "Question cannot be empty")
-
     logger.info(f"Received question: '{req.question}'")
     start_time = time.time()
+    model = gen.GenerativeModel("gemini-2.0-flash")
 
     try:
-        query_emb = await get_embedding(req.question, google_api_key)
-        index = get_pinecone_index()
+        classification_prompt = CLASSIFICATION_PROMPT.format(query=req.question)
+        classification_response = model.generate_content(classification_prompt)
+        classification = classification_response.text.strip().lower() if classification_response else "retrieval"
 
-        # ✅ Build dynamic metadata filter
-        filter_metadata = {"company_id": str(current_user.company_id)}
-        optional_filters = {
-            "category": getattr(req, "category", None),
-            "tenant_name": getattr(req, "tenant_name", None),
-            "floor": getattr(req, "floor", None),
-            "building_id": getattr(req, "building_id", None),
-        }
-        for key, value in optional_filters.items():
-            if value and str(value).strip():
-                filter_metadata[key] = str(value)
+        logger.info(f"Query classified as: {classification}")
 
-        logger.info(f"Applying Pinecone filter: {filter_metadata}")
-
-        result = index.query(
-            vector=query_emb,
-            top_k=6,
-            include_metadata=True,
-            filter=filter_metadata,
-        )
-
-        if not result["matches"]:
-            answer = "The information is not available in the provided documents."
-            confidence_score = 0.0
-        else:
-            scores = [m["score"] for m in result["matches"]]
-            confidence_score = float(np.mean(scores))
-            contexts = [m["metadata"]["chunk"] for m in result["matches"]]
-            combined_context = "\n\n".join(contexts)
-
-   
-            if len(combined_context) > 9000:
-                combined_context = combined_context[:9000]
-
-
-            prompt = system_prompt.format(context=combined_context, query=req.question)
-
-            model = gen.GenerativeModel("gemini-2.0-flash")
-            response = model.generate_content(prompt)
+        if classification == "general":
+            general_prompt = GENERAL_PROMPT_TEMPLATE.format(query=req.question)
+            response = model.generate_content(general_prompt)
             answer = response.text.strip() if response and response.text else "No answer generated."
+            confidence_score = 1.0 
+            combined_context = ""
+
+        else:
+            query_emb = await get_embedding(req.question, google_api_key)
+            index = get_pinecone_index()
+
+            filter_metadata = {"company_id": str(current_user.company_id)}
+            optional_filters = {
+                "category": getattr(req, "category", None),
+                "tenant_name": getattr(req, "tenant_name", None),
+                "floor": getattr(req, "floor", None),
+                "building_id": getattr(req, "building_id", None),
+            }
+            for key, value in optional_filters.items():
+                if value and str(value).strip():
+                    filter_metadata[key] = str(value)
+
+            logger.info(f"Applying Pinecone filter: {filter_metadata}")
+            result = index.query(
+                vector=query_emb,
+                top_k=6,
+                include_metadata=True,
+                filter=filter_metadata,
+            )
+
+            if not result["matches"]:
+                answer = "The information is not available in the provided documents."
+                confidence_score = 0.0
+                combined_context = ""
+            else:
+                scores = [m["score"] for m in result["matches"]]
+                print("Scores:", scores)
+                confidence_score = float(max(scores))
+                print("Confidence Score:", confidence_score)
+                contexts = [m["metadata"]["chunk"] for m in result["matches"]]
+                combined_context = "\n".join(contexts)
+
+                if len(combined_context) > 9000:
+                    combined_context = combined_context[:9000]
+
+                prompt = system_prompt.format(context=combined_context, query=req.question)
+                response = model.generate_content(prompt)
+                answer = response.text.strip() if response and response.text else "No answer generated."
 
     except Exception as e:
-        logger.error(f" Failed to search results: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve information from documents")
+        logger.error(f"Failed to process query: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to generate response")
+
+
     end_time = time.time()
     response_time = round(end_time - start_time, 3)
 
     session = get_or_create_chat_session(
         db, req.session_id, current_user.id, req.category, current_user.company_id
     )
+
     save_chat_history(
         db=db,
         session_id=session.id,
@@ -196,6 +210,7 @@ async def ask_simple_service(req, current_user, db):
         response_json={
             "answer": answer,
             "confidence": confidence_score,
+            "classification": classification,
         },
     )
 
@@ -204,8 +219,10 @@ async def ask_simple_service(req, current_user, db):
         "question": req.question,
         "answer": answer,
         "confidence": confidence_score,
+        "classification": classification,
         "response_time": response_time,
     }
+
 async def list_simple_files_service(
     building_id: Optional[int],
     category: Optional[str],
@@ -256,6 +273,8 @@ async def list_simple_files_service(
         building_id=building_id,
         category=category,
     )
+
+
 
 
 

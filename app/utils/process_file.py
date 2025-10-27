@@ -23,8 +23,6 @@ from app.utils.metadata import extract_metadata_llm
 logger = logging.getLogger(__name__)
 
 
-
-
 async def save_to_temp(file, id, user, category) -> str:
     company_id = user.company_id
     path = None
@@ -93,7 +91,6 @@ async def get_embedding(texts: Union[str, List[str]], api_key: str, output_dim: 
         raise ValueError("No texts provided for embedding")
     
     gen.configure(api_key=api_key)
-    # model = os.getenv("GEMINI_EMBEDDING_MODEL")
     
     def embed_sync():
         result = gen.embed_content(
