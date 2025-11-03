@@ -141,5 +141,4 @@ async def delete_building(
     deleted = await building_crud.delete_building(db, building_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Building not found")
-
     return {"message": "Building and associated records deleted successfully"}

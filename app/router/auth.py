@@ -74,15 +74,15 @@ async def login_user(
     result = await auth_service.login_user_service(login_data, db)
 
    
-    response.set_cookie(
-        key="access_token",
-        value=result["access_token"],
-        httponly=True,          
-        secure=True,           
-        samesite="lax",         
-        max_age=60 * 60 * 24,    
-        path="/"                
-    )
+    # response.set_cookie(
+    #     key="access_token",
+    #     value=result["access_token"],
+    #     httponly=True,          
+    #     secure=True,           
+    #     samesite="lax",         
+    #     max_age=60 * 60 * 24,    
+    #     path="/"                
+    # )
 
    
     return {
