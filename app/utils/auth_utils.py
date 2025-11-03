@@ -1,70 +1,88 @@
-
 import secrets
-from fastapi import Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import Depends, HTTPException, status, Cookie
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from typing import Optional
-
+import asyncio
 from dotenv import load_dotenv
 from app.crud import auth_crud
 from app.database.db import get_db
 from app.models.models import Token, User
-from app.crud.auth_crud import get_user_by_token
-from app.config import pwd_context,oauth2_scheme
+from app.config import pwd_context, oauth2_scheme
+
 load_dotenv()
 
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+async def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return await asyncio.to_thread(pwd_context.verify, plain_password, hashed_password)
 
-def get_password_hash(password: str) -> str:
+
+async def get_password_hash(password: str) -> str:
     try:
-        hashed = pwd_context.hash(password)
-        print(f"[DEBUG] Password hashed successfully")
+        hashed = await asyncio.to_thread(pwd_context.hash, password)
         return hashed
     except Exception as e:
-        print(f"[DEBUG] Password hashing error: {str(e)}")
         raise
 
-def create_bearer_token(db: Session, user_id: int) -> str:
+
+
+async def create_bearer_token(db: AsyncSession, user_id: int) -> str:
     token = secrets.token_urlsafe(32)
     db_token = Token(token=token, user_id=user_id)
     db.add(db_token)
-    db.commit()
+    await db.commit()
+    await db.refresh(db_token)
     return token
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+
+# async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
+#     credentials_exception = HTTPException(
+#         status_code=status.HTTP_401_UNAUTHORIZED,
+#         detail="Could not validate credentials",
+#         headers={"WWW-Authenticate": "Bearer"},
+#     )
+
+#     user = await auth_crud.get_user_by_token(db, token)
+#     if not user:
+#         raise credentials_exception
+
+#     return user
+
+async def get_current_user(
+    db: AsyncSession = Depends(get_db),
+    token: str = Depends(oauth2_scheme),
+    access_token: str = Cookie("access_token")
+) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    user = get_user_by_token(db, token)
-    if not user:
-        print(f"[DEBUG] Invalid or expired token")
+    token_to_use = access_token or token 
+    print("Using token:", access_token, token)
+
+    if not token_to_use:
         raise credentials_exception
 
-    print(f"[DEBUG] User authenticated successfully: {user.email}, role: {user.role}")
+    user = await auth_crud.get_user_by_token(db, token_to_use)
+    if not user:
+        raise credentials_exception
+
     return user
 
-def authenticate_user(email: str, password: str, role: str, db: Session) -> Optional[User]:
+async def authenticate_user(email: str, password: str, role: str, db: AsyncSession) -> Optional[User]:
     try:
-        user = db.query(User).filter(User.email.ilike(email)).first()
+        result = await db.execute(select(User).where(User.email.ilike(email)))
+        user: User = result.scalars().first()
+
         if not user:
-            print(f"[DEBUG] User not found: {email}")
             return None
-
-        if not verify_password(password, user.hashed_password):
-            print(f"[DEBUG] Password verification failed for: {email}")
+        if not await verify_password(password, user.hashed_password):
             return None
-
         if user.role != role:
-            print(f"[DEBUG] Role verification failed for: {email}, expected: {role}, got: {user.role}")
             return None
-
-        print(f"[DEBUG] User authenticated successfully: {email}, role: {role}")
         return user
-    except Exception as e:
-        print(f"[DEBUG] Authentication error for {email}: {str(e)}")
+    except Exception:
         return None

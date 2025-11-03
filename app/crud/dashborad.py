@@ -1,31 +1,44 @@
-from sqlalchemy import func, union_all, select
-from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from app.models.models import OTP, Building, StandaloneFile, User, ChatSession, ChatHistory, UserLogin
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from typing import List
+from app.models.models import OTP, Building, StandaloneFile, User, ChatSession, ChatHistory, UserLogin, UserFeedback
 from app.services.prompts import build_feedback_classification_prompt
-
-
-from sqlalchemy import func
-from app.models.models import ChatHistory, User, UserLogin, UserFeedback
-from datetime import datetime
 from app.utils.llm_client import invoke_llm
+from sqlalchemy import func
 
-def get_stats_data(db: Session, company_id: int, last_24h: datetime):
-    total_standalone = db.query(StandaloneFile).filter(StandaloneFile.company_id == company_id).count()
-    total_building_files = (
-        db.query(StandaloneFile)
+
+async def get_stats_data(db: AsyncSession, company_id: int, last_24h: datetime):
+    total_standalone = await db.execute(
+        select(func.count()).select_from(StandaloneFile).where(StandaloneFile.company_id == company_id)
+    )
+    total_standalone = total_standalone.scalar() or 0
+
+    total_building_files = await db.execute(
+        select(func.count())
+        .select_from(StandaloneFile)
         .join(Building, StandaloneFile.building_id == Building.id)
-        .filter(Building.company_id == company_id)
-        .count()
+        .where(Building.company_id == company_id)
     )
+    total_building_files = total_building_files.scalar() or 0
     total_documents = total_standalone + total_building_files
-    total_chat_history = db.query(ChatHistory).filter(ChatHistory.company_id == company_id).count()
-    total_buildings = db.query(Building).filter(Building.company_id == company_id).count()
-    recent_uploads = (
-        db.query(StandaloneFile)
-        .filter(StandaloneFile.company_id == company_id, StandaloneFile.uploaded_at >= last_24h)
-        .count()
+
+    total_chat_history = await db.execute(
+        select(func.count()).select_from(ChatHistory).where(ChatHistory.company_id == company_id)
     )
+    total_chat_history = total_chat_history.scalar() or 0
+
+    total_buildings = await db.execute(
+        select(func.count()).select_from(Building).where(Building.company_id == company_id)
+    )
+    total_buildings = total_buildings.scalar() or 0
+
+    recent_uploads = await db.execute(
+        select(func.count()).select_from(StandaloneFile)
+        .where(StandaloneFile.company_id == company_id, StandaloneFile.uploaded_at >= last_24h)
+    )
+    recent_uploads = recent_uploads.scalar() or 0
+
     return {
         "total_documents": total_documents,
         "buildings": total_buildings,
@@ -33,15 +46,28 @@ def get_stats_data(db: Session, company_id: int, last_24h: datetime):
         "AI_queries": total_chat_history,
     }
 
-def get_analytics_data(db: Session, company_id: int, start_date: datetime):
-    platform_users = db.query(User).filter(User.company_id == company_id).count()
-    active_users = db.query(User).filter(User.company_id == company_id, User.is_verified == True).count()
-    chat_sessions = (
-        db.query(ChatSession)
-        .filter(ChatSession.company_id == company_id, ChatSession.created_at >= start_date)
-        .count()
+
+async def get_analytics_data(db: AsyncSession, company_id: int, start_date: datetime):
+    platform_users_res = await db.execute(select(func.count()).select_from(User).where(User.company_id == company_id))
+    platform_users = platform_users_res.scalar() or 0
+
+    active_users_res = await db.execute(
+        select(func.count()).select_from(User)
+        .where(User.company_id == company_id, User.is_verified == True)
     )
-    total_logins = db.query(User).filter(User.company_id == company_id).count()
+    active_users = active_users_res.scalar() or 0
+
+    chat_sessions_res = await db.execute(
+        select(func.count()).select_from(ChatSession)
+        .where(ChatSession.company_id == company_id, ChatSession.created_at >= start_date)
+    )
+    chat_sessions = chat_sessions_res.scalar() or 0
+
+    total_logins_res = await db.execute(
+        select(func.count()).select_from(User).where(User.company_id == company_id)
+    )
+    total_logins = total_logins_res.scalar() or 0
+
     return {
         "chat_sessions": chat_sessions,
         "active_users": active_users,
@@ -49,66 +75,68 @@ def get_analytics_data(db: Session, company_id: int, start_date: datetime):
         "platform_users": platform_users,
     }
 
-def get_usage_trends_data(db: Session, company_id: int, start_date: datetime, days: int):
-    login_counts = (
-        db.query(func.date(OTP.created_at).label("date"), func.count().label("count"))
-        .filter(
+
+async def get_usage_trends_data(db: AsyncSession, company_id: int, start_date: datetime, days: int):
+    login_counts_res = await db.execute(
+        select(func.date(OTP.created_at).label("date"), func.count().label("count"))
+        .where(
             OTP.created_at >= start_date,
-            OTP.email.in_(db.query(User.email).filter(User.company_id == company_id))
+            OTP.email.in_(
+                select(User.email).where(User.company_id == company_id)
+            )
         )
         .group_by(func.date(OTP.created_at))
         .order_by(func.date(OTP.created_at))
-        .all()
     )
+    login_counts = login_counts_res.all()
+
     daily_login_activity = []
     for i in range(days):
         day = (start_date + timedelta(days=i)).isoformat()
         count = next((c for d, c in login_counts if d.isoformat() == day), 0)
         daily_login_activity.append({"date": day, "logins": count})
+
     return daily_login_activity
 
-def get_recent_questions_data(db: Session, company_id: int):
-    chat_history_query = (
+
+async def get_recent_questions_data(db: AsyncSession, company_id: int):
+    result = await db.execute(
         select(ChatHistory.question, ChatHistory.timestamp)
         .where(ChatHistory.company_id == company_id)
-    )
-    union_query = union_all(chat_history_query).alias("questions")
-    recent_questions = (
-        db.query(union_query.c.question, union_query.c.timestamp)
-        .order_by(union_query.c.timestamp.desc())
+        .order_by(ChatHistory.timestamp.desc())
         .limit(10)
-        .all()
     )
+    recent_questions = result.all()
     return [row[0] for row in recent_questions]
 
-def get_activity_summary_data(db: Session, company_id: int, start_date: datetime, days: int):
-    chat_sessions = (
-        db.query(func.date(ChatSession.created_at).label("date"), func.count().label("count"))
-        .filter(ChatSession.company_id == company_id, ChatSession.created_at >= start_date)
+
+async def get_activity_summary_data(db: AsyncSession, company_id: int, start_date: datetime, days: int):
+    chat_sessions_res = await db.execute(
+        select(func.date(ChatSession.created_at).label("date"), func.count().label("count"))
+        .where(ChatSession.company_id == company_id, ChatSession.created_at >= start_date)
         .group_by(func.date(ChatSession.created_at))
         .order_by(func.date(ChatSession.created_at))
-        .all()
     )
-    logins = (
-        db.query(func.date(OTP.created_at).label("date"), func.count().label("count"))
-        .filter(
+    chat_sessions = chat_sessions_res.all()
+
+    logins_res = await db.execute(
+        select(func.date(OTP.created_at).label("date"), func.count().label("count"))
+        .where(
             OTP.created_at >= start_date,
-            OTP.email.in_(db.query(User.email).filter(User.company_id == company_id))
+            OTP.email.in_(select(User.email).where(User.company_id == company_id))
         )
         .group_by(func.date(OTP.created_at))
-        .all()
     )
-    active_users = (
-        db.query(func.date(ChatSession.created_at).label("date"),
-                 func.count(func.distinct(ChatSession.user_id)).label("count"))
-        .filter(ChatSession.company_id == company_id, ChatSession.created_at >= start_date)
+    logins = logins_res.all()
+
+    active_users_res = await db.execute(
+        select(func.date(ChatSession.created_at).label("date"), func.count(func.distinct(ChatSession.user_id)).label("count"))
+        .where(ChatSession.company_id == company_id, ChatSession.created_at >= start_date)
         .group_by(func.date(ChatSession.created_at))
-        .all()
     )
-    summary = []
-    for i in range(days):
-        day = (start_date + timedelta(days=i)).isoformat()
-        summary.append({"date": day, "chat_sessions": 0, "logins": 0, "active_users": 0})
+    active_users = active_users_res.all()
+
+    summary = [{"date": (start_date + timedelta(days=i)).isoformat(), "chat_sessions": 0, "logins": 0, "active_users": 0} for i in range(days)]
 
     for date, count in chat_sessions:
         for entry in summary:
@@ -125,66 +153,49 @@ def get_activity_summary_data(db: Session, company_id: int, start_date: datetime
             if entry["date"] == date.isoformat():
                 entry["active_users"] = count
 
-    result = [
-        {"date": entry["date"], "chat_sessions": entry["chat_sessions"], "active_users": entry["active_users"]}
-        for entry in summary
-    ]
+    result = [{"date": e["date"], "chat_sessions": e["chat_sessions"], "active_users": e["active_users"]} for e in summary]
+
     return summary, result
 
 
 
+
 async def classify_feedback_with_llm(feedback_list: list[str]):
-    """
-    Classifies a list of feedback strings using the global llm via invoke_llm.
-    """
     if not feedback_list:
         return []
 
-    prompt = build_feedback_classification_prompt(feedback_list)
+    prompt = await build_feedback_classification_prompt(feedback_list)
 
     try:
         result = invoke_llm(prompt, expect_json=True, fallback={"feedback": ["neutral"] * len(feedback_list)})
         feedback_labels = result.get("feedback", [])
-
-        # Ensure output length matches input
         if len(feedback_labels) != len(feedback_list):
             feedback_labels = ["neutral"] * len(feedback_list)
-
         return feedback_labels
     except Exception as e:
-        print(f"⚠️ LLM feedback classification failed: {e}")
         return ["neutral"] * len(feedback_list)
 
 
-async def get_rag_metrics_data(db: Session, company_id: int):
-    query = (
-        db.query(ChatHistory)
-        .join(User, ChatHistory.user_id == User.id)
-        .filter(User.company_id == company_id)
-    )
+async def get_rag_metrics_data(db: AsyncSession, company_id: int):
+    query = select(ChatHistory).join(User, ChatHistory.user_id == User.id).where(User.company_id == company_id)
+    query_result = await db.execute(query)
+    chat_histories = query_result.scalars().all()
 
-    total_queries = query.count() or 0
-    chat_sessions = query.with_entities(func.count(func.distinct(ChatHistory.chat_session_id))).scalar() or 0
-    active_users = query.with_entities(func.count(func.distinct(ChatHistory.user_id))).scalar() or 0
-    total_logins = (
-        db.query(func.count(UserLogin.id))
-        .join(User, UserLogin.user_id == User.id)
-        .filter(User.company_id == company_id)
-        .scalar()
-        or 0
-    )
-    platform_users = db.query(func.count(User.id)).filter(User.company_id == company_id).scalar() or 0
+    total_queries = len(chat_histories)
+    chat_sessions = len(set(ch.chat_session_id for ch in chat_histories))
+    active_users = len(set(ch.user_id for ch in chat_histories))
 
-    # Fetch all feedback for this company
-    feedback_entries = (
-        db.query(UserFeedback.feedback)
-        .filter(UserFeedback.company_id == company_id)
-        .filter(UserFeedback.feedback.isnot(None))
-        .all()
+    total_logins_res = await db.execute(
+        select(func.count(UserLogin.id)).join(User, UserLogin.user_id == User.id).where(User.company_id == company_id)
     )
-    feedback_texts = [f[0] for f in feedback_entries if f[0]]
+    total_logins = total_logins_res.scalar() or 0
 
-    # Classify feedbacks using LLM
+    platform_users_res = await db.execute(select(func.count(User.id)).where(User.company_id == company_id))
+    platform_users = platform_users_res.scalar() or 0
+
+    feedback_entries_res = await db.execute(select(UserFeedback.feedback).where(UserFeedback.company_id == company_id, UserFeedback.feedback.isnot(None)))
+    feedback_texts = [f[0] for f in feedback_entries_res.all() if f[0]]
+
     positive_feedback_count = 0
     if feedback_texts:
         classifications = await classify_feedback_with_llm(feedback_texts)
@@ -193,15 +204,12 @@ async def get_rag_metrics_data(db: Session, company_id: int):
     total_feedbacks = len(feedback_texts)
     positive_feedback_percent = (positive_feedback_count / total_feedbacks * 100) if total_feedbacks > 0 else 0
 
-# Average response time in seconds & confidence
-    avg_response_time_sec = query.with_entities(func.avg(ChatHistory.response_time)).scalar() or 0.0
-    avg_confidence_fraction = query.with_entities(func.avg(ChatHistory.confidence)).scalar() or 0.0
+    avg_response_time_sec = sum(ch.response_time or 0 for ch in chat_histories) / len(chat_histories) if chat_histories else 0.0
+    avg_confidence_fraction = sum(ch.confidence or 0 for ch in chat_histories) / len(chat_histories) if chat_histories else 0.0
 
-    # Convert
-    avg_response_time_ms = round(avg_response_time_sec * 1000, 2)  # seconds → ms
-    avg_confidence_percent = round(avg_confidence_fraction * 100, 2)  # fraction → %
+    avg_response_time_ms = round(avg_response_time_sec * 1000, 2)
+    avg_confidence_percent = round(avg_confidence_fraction * 100, 2)
 
-    # Later in return
     return {
         "dashboard_metrics": {
             "chat_sessions": chat_sessions,
@@ -216,5 +224,3 @@ async def get_rag_metrics_data(db: Session, company_id: int):
         "total_feedbacks": total_feedbacks,
         "last_updated": datetime.utcnow().isoformat()
     }
-
-

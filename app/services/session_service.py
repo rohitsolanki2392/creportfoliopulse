@@ -1,9 +1,9 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 from app.crud.user_chatbot_crud import delete_user_chat_session, get_user_chat_history, list_user_chat_sessions
 from app.models.models import ChatSession, ChatHistory
 
-async def list_chat_sessions_service(current_user, db: Session):
+async def list_chat_sessions_service(current_user, db: AsyncSession):
     """Lists chat sessions for the user."""
     sessions = list_user_chat_sessions(db, current_user.id)
 
@@ -17,7 +17,7 @@ async def list_chat_sessions_service(current_user, db: Session):
             title = messages[1].question if len(messages) >= 2 else messages[0].question
             s.title = title
             db.add(s)
-            db.commit()
+            await db.commit()
             db.refresh(s)
 
         session_list.append({
@@ -31,7 +31,7 @@ async def list_chat_sessions_service(current_user, db: Session):
     return session_list
 
 
-async def get_session_history_service(session_id: str, current_user, db: Session):
+async def get_session_history_service(session_id: str, current_user, db: AsyncSession):
     """Fetch chat history for a session."""
     session = db.query(ChatSession).filter_by(id=session_id, user_id=current_user.id).first()
     if not session:
@@ -49,7 +49,7 @@ async def get_session_history_service(session_id: str, current_user, db: Session
     ]
 
 
-async def delete_session_service(session_id: str, current_user, db: Session):
+async def delete_session_service(session_id: str, current_user, db: AsyncSession):
     """Delete a chat session."""
     session = delete_user_chat_session(db, session_id, current_user.id)
     if not session:

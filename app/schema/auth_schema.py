@@ -33,7 +33,7 @@ class UserLogin(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    token_type: str = "bearer"   # <-- Required for Swagger to auto authorize
+    token_type: str = "bearer"  
     message: str
     role: str
 class ForgotPassword(BaseModel):
@@ -52,9 +52,9 @@ class UserProfile(BaseModel):
     email: str
     role: str
     photo_url: Optional[str] = None
-    bg_photo_url: Optional[str] = None   # ✅ added
+    bg_photo_url: Optional[str] = None  
     photo_base64: Optional[str] = None
-    bg_photo_base64: Optional[str] = None  # ✅ added
+    bg_photo_base64: Optional[str] = None  
     model_config = ConfigDict(from_attributes=True)
 
 

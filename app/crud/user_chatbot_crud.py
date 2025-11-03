@@ -1,13 +1,11 @@
-
-
-
 from datetime import datetime
-from typing import Optional
-from sqlalchemy.orm import Session
+from typing import Optional, List
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from app.models.models import ChatHistory, ChatSession, StandaloneFile
-
-def save_standalone_file(
-    db: Session,
+from typing import Dict
+async def save_standalone_file(
+    db: AsyncSession,
     file_id: str,
     file_name: str,
     user_id: int,
@@ -16,7 +14,9 @@ def save_standalone_file(
     file_size: str,
     company_id: int,
     building_id: Optional[int] = None
-):
+
+    
+) -> StandaloneFile:
     new_file = StandaloneFile(
         file_id=file_id,
         original_file_name=file_name,
@@ -29,38 +29,48 @@ def save_standalone_file(
         company_id=company_id
     )
     db.add(new_file)
-    db.commit()
-    db.refresh(new_file)
+    await db.commit()
+    await db.refresh(new_file)
     return new_file
 
-def list_user_files(db: Session, user_id: int, is_admin: bool):
-    query = db.query(StandaloneFile)
+
+async def list_user_files(db: AsyncSession, user_id: int, is_admin: bool) -> List[StandaloneFile]:
+    stmt = select(StandaloneFile)
     if not is_admin:
-        query = query.filter_by(user_id=user_id)
-    return query.all()
-
-def get_standalone_file(db: Session, file_id: str):
-    return db.query(StandaloneFile).filter_by(file_id=file_id).first()
-
-def delete_standalone_file(db: Session, file_id: str):
-    db_file = get_standalone_file(db, file_id)
-    if db_file:
-        db.delete(db_file)
-        db.commit()
-    return db_file
+        stmt = stmt.where(StandaloneFile.user_id == user_id)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
+async def get_standalone_file(db: AsyncSession, file_id: str) -> Optional[StandaloneFile]:
+    result = await db.execute(select(StandaloneFile).where(StandaloneFile.file_id == file_id))
+    return result.scalars().first()
 
-def get_or_create_chat_session(
-    db: Session,
+
+async def delete_standalone_file(db: AsyncSession, file_id: str) -> Optional[StandaloneFile]:
+    file_obj = await get_standalone_file(db, file_id)
+    if file_obj:
+        await db.delete(file_obj)
+        await db.commit()
+    return file_obj
+
+
+async def get_or_create_chat_session(
+    db: AsyncSession,
     session_id: Optional[str],
     user_id: int,
     category: Optional[str] = None,
     company_id: Optional[int] = None,
     title: Optional[str] = None,
     building_id: Optional[int] = None
-):
-    session = db.query(ChatSession).filter_by(id=session_id, user_id=user_id).first() if session_id else None
+) -> ChatSession:
+    session = None
+    if session_id:
+        result = await db.execute(
+            select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
+        )
+        session = result.scalars().first()
+
     if not session:
         session = ChatSession(
             id=session_id,
@@ -72,23 +82,33 @@ def get_or_create_chat_session(
             created_at=datetime.utcnow(),
         )
         db.add(session)
-        db.commit()
-        db.refresh(session)
+        await db.commit()
+        await db.refresh(session)
     return session
 
-def list_user_chat_sessions(db: Session, user_id: int):
-    return db.query(ChatSession).filter_by(user_id=user_id).order_by(ChatSession.created_at.desc()).all()
 
-def delete_user_chat_session(db: Session, session_id: str, user_id: int):
-    session = db.query(ChatSession).filter_by(id=session_id, user_id=user_id).first()
+async def list_user_chat_sessions(db: AsyncSession, user_id: int) -> List[ChatSession]:
+    result = await db.execute(
+        select(ChatSession).where(ChatSession.user_id == user_id).order_by(ChatSession.created_at.desc())
+    )
+    return result.scalars().all()
+
+
+async def delete_user_chat_session(db: AsyncSession, session_id: str, user_id: int) -> Optional[ChatSession]:
+    result = await db.execute(
+        select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
+    )
+    session = result.scalars().first()
     if session:
-        db.delete(session)
-        db.commit()
+        await db.delete(session)
+        await db.commit()
     return session
 
 
-def save_chat_history(
-    db: Session,
+
+
+async def save_chat_history(
+    db: AsyncSession,
     session_id: str,
     user_id: int,
     question: str,
@@ -98,7 +118,7 @@ def save_chat_history(
     company_id: Optional[int] = None,
     response_time: Optional[float] = None,
     confidence: Optional[float] = None
-):
+) -> ChatHistory:
     chat_history = ChatHistory(
         chat_session_id=session_id,
         user_id=user_id,
@@ -112,12 +132,20 @@ def save_chat_history(
         confidence=confidence
     )
     db.add(chat_history)
-    db.commit()
-    db.refresh(chat_history)
+    await db.commit()
+    await db.refresh(chat_history)
     return chat_history
 
-def get_user_chat_history(db: Session, session_id: str, user_id: int):
-    return db.query(ChatHistory).filter_by(
-        chat_session_id=session_id,
-        user_id=user_id
-    ).order_by(ChatHistory.timestamp.asc()).all()
+
+async def get_user_chat_history(db: AsyncSession, session_id: str, user_id: int) -> List[ChatHistory]:
+    result = await db.execute(
+        select(ChatHistory)
+        .where(ChatHistory.chat_session_id == session_id, ChatHistory.user_id == user_id)
+        .order_by(ChatHistory.timestamp.asc())
+    )
+    return result.scalars().all()
+
+
+
+
+

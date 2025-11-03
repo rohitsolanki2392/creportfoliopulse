@@ -1,24 +1,24 @@
 
-import re
+import asyncio
 import time
-from typing import Optional
+from typing import  Optional
 from fastapi import HTTPException
-import numpy as np
-from sqlalchemy.orm import Session
-from langchain_core.prompts import ChatPromptTemplate
-from app.crud.user_chatbot_crud import get_or_create_chat_session, save_chat_history, save_standalone_file
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.crud.user_chatbot_crud import get_or_create_chat_session, get_user_chat_history, save_chat_history, save_standalone_file
 from app.models.models import  StandaloneFile
 from app.schema.chat_bot_schema import FileItem, ListFilesResponse
 from app.schema.user_chat import StandaloneFileResponse
 from app.utils.process_file import get_embedding, get_pinecone_index, save_to_temp, process_uploaded_file
 from datetime import datetime
-import json
+
 import logging
 from uuid import uuid4
 import os
 import logging
 from fastapi import HTTPException, UploadFile
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from app.models.models import StandaloneFile
 from app.config import google_api_key
@@ -41,7 +41,7 @@ async def upload_standalone_files_service(
     files, 
     category, 
     current_user, 
-    db: Session,
+    db: AsyncSession,
     building_id: Optional[int] = None 
 ):
     if current_user.role != "admin":
@@ -66,13 +66,12 @@ async def upload_standalone_files_service(
                 os.remove(temp_path)
                 continue
             unique_filename = f"standalone_files/{file_id}{file_ext}"
-            print(unique_filename)
 
             await process_uploaded_file(
                 temp_path, file.filename, file_id, google_api_key, category, company_id, building_id=building_id
             )
 
-            saved_file = save_standalone_file(
+            saved_file = await save_standalone_file(
                 db=db,
                 file_id=file_id,
                 file_name=file.filename,
@@ -118,7 +117,7 @@ from fastapi import HTTPException
 
 gen.configure(api_key=google_api_key)
 
-
+from sqlalchemy.future import select
 
 async def ask_simple_service(req, current_user, db):
     if not google_api_key:
@@ -145,7 +144,7 @@ async def ask_simple_service(req, current_user, db):
 
         else:
             query_emb = await get_embedding(req.question, google_api_key)
-            index = get_pinecone_index()
+            index =await get_pinecone_index()
 
             filter_metadata = {"company_id": str(current_user.company_id)}
             optional_filters = {
@@ -172,9 +171,7 @@ async def ask_simple_service(req, current_user, db):
                 combined_context = ""
             else:
                 scores = [m["score"] for m in result["matches"]]
-                print("Scores:", scores)
                 confidence_score = float(max(scores))
-                print("Confidence Score:", confidence_score)
                 contexts = [m["metadata"]["chunk"] for m in result["matches"]]
                 combined_context = "\n".join(contexts)
 
@@ -193,11 +190,11 @@ async def ask_simple_service(req, current_user, db):
     end_time = time.time()
     response_time = round(end_time - start_time, 3)
 
-    session = get_or_create_chat_session(
+    session = await get_or_create_chat_session(
         db, req.session_id, current_user.id, req.category, current_user.company_id
     )
 
-    save_chat_history(
+    await save_chat_history(
         db=db,
         session_id=session.id,
         user_id=current_user.id,
@@ -223,24 +220,157 @@ async def ask_simple_service(req, current_user, db):
         "response_time": response_time,
     }
 
+
+# async def ask_simple_service(req, current_user, db):
+#     if not google_api_key:
+#         raise HTTPException(500, "Google API key missing")
+#     if not req.question.strip():
+#         raise HTTPException(400, "Question cannot be empty")
+
+#     logger.info(f"Received question: '{req.question}'")
+#     start_time = time.time()
+
+#     model = gen.GenerativeModel("gemini-2.0-flash")
+
+#     try:
+
+#         session = await get_or_create_chat_session(
+#             db, req.session_id, current_user.id, req.category, current_user.company_id
+#         )
+
+
+#         await save_chat_history(
+#             db=db,
+#             session_id=session.id,
+#             user_id=current_user.id,
+#             file_id=None,
+#             question=req.question,
+#             answer=None, 
+#             company_id=current_user.company_id,
+#             response_json=None,
+#             response_time=None,
+#             confidence=None,
+#         )
+
+#         history_records = await get_user_chat_history(db, session.id, current_user.id)
+#         last_15_messages = history_records[-15:] if len(history_records) > 15 else history_records
+
+
+#         gemini_history = []
+#         for h in last_15_messages:
+#             if h.question:
+#                 gemini_history.append({"role": "user", "parts": [h.question]})
+#             if h.answer:
+#                 gemini_history.append({"role": "model", "parts": [h.answer]})
+
+
+#         classification_prompt = CLASSIFICATION_PROMPT.format(query=req.question)
+#         classification_response = model.generate_content(classification_prompt)
+#         classification = (
+#             classification_response.text.strip().lower()
+#             if classification_response
+#             else "retrieval"
+#         )
+
+#         logger.info(f"Query classified as: {classification}")
+
+
+#         def _blocking_chat():
+#             chat = model.start_chat(history=gemini_history)
+#             if classification == "general":
+#                 prompt = GENERAL_PROMPT_TEMPLATE.format(query=req.question)
+#                 response = chat.send_message(prompt)
+#             else:
+#                 # Retrieval-based flow
+#                 query_emb = asyncio.run(get_embedding(req.question, google_api_key))
+#                 index = asyncio.run(get_pinecone_index())
+
+#                 filter_metadata = {"company_id": str(current_user.company_id)}
+#                 optional_filters = {
+#                     "category": getattr(req, "category", None),
+#                     "tenant_name": getattr(req, "tenant_name", None),
+#                     "floor": getattr(req, "floor", None),
+#                     "building_id": getattr(req, "building_id", None),
+#                 }
+#                 for key, value in optional_filters.items():
+#                     if value and str(value).strip():
+#                         filter_metadata[key] = str(value)
+
+#                 logger.info(f"Applying Pinecone filter: {filter_metadata}")
+#                 result = index.query(
+#                     vector=query_emb,
+#                     top_k=6,
+#                     include_metadata=True,
+#                     filter=filter_metadata,
+#                 )
+
+#                 if not result["matches"]:
+#                     return "The information is not available in the provided documents."
+
+#                 contexts = [m["metadata"]["chunk"] for m in result["matches"]]
+#                 combined_context = "\n".join(contexts)[:9000]
+
+#                 prompt = system_prompt.format(context=combined_context, query=req.question)
+#                 response = chat.send_message(prompt)
+#             return response.text
+
+#         answer = await asyncio.to_thread(_blocking_chat)
+#         confidence_score = 1.0
+
+#     except Exception as e:
+#         logger.error(f"Failed to process query: {str(e)}")
+#         raise HTTPException(status_code=500, detail="Failed to generate response")
+
+#     end_time = time.time()
+#     response_time = round(end_time - start_time, 3)
+
+
+#     await save_chat_history(
+#         db=db,
+#         session_id=session.id,
+#         user_id=current_user.id,
+#         file_id=None,
+#         question=req.question,
+#         answer=answer,
+#         company_id=current_user.company_id,
+#         response_time=response_time,
+#         confidence=confidence_score,
+#         response_json={
+#             "answer": answer,
+#             "confidence": confidence_score,
+#             "classification": classification,
+#         },
+#     )
+
+#     return {
+#         "session_id": session.id,
+#         "question": req.question,
+#         "answer": answer,
+#         "confidence": confidence_score,
+#         "classification": classification,
+#         "response_time": response_time,
+#     }
+
+
+
 async def list_simple_files_service(
     building_id: Optional[int],
     category: Optional[str],
     current_user,
-    db: Session
+    db: AsyncSession
 ) -> ListFilesResponse:
 
-    query = db.query(StandaloneFile).filter(
+
+    stmt = select(StandaloneFile).where(
         StandaloneFile.company_id == current_user.company_id
     )
-
     if building_id is not None:
-        query = query.filter(StandaloneFile.building_id == building_id)
-
+        stmt = stmt.where(StandaloneFile.building_id == building_id)
     if category:
-        query = query.filter(StandaloneFile.category == category)
+        stmt = stmt.where(StandaloneFile.category == category)
 
-    files = query.all()
+    result = await db.execute(stmt)               
+    files = result.scalars().all()
 
     result: list[FileItem] = []
     total_size_bytes = 0
@@ -277,20 +407,22 @@ async def list_simple_files_service(
 
 
 
-
 async def update_standalone_file_service(
     file_id: str,
     new_file: UploadFile,
     current_user,
-    db: Session,
+    db: AsyncSession,
     building_id: Optional[int] = None,
     category: Optional[str] = None
 ):
-    # google_api_key = os.getenv("GOOGLE_API_KEY")
+
+
+
     if not google_api_key:
         raise HTTPException(status_code=500, detail="Configuration missing: GOOGLE_API_KEY")
 
-    existing_file = db.query(StandaloneFile).filter(StandaloneFile.file_id == file_id).first()
+    stmt = select(StandaloneFile).where(StandaloneFile.file_id == file_id)
+    existing_file = (await db.execute(stmt)).scalar_one_or_none()
     if not existing_file:
         raise HTTPException(status_code=404, detail=f"File with id {file_id} not found")
 
@@ -304,7 +436,7 @@ async def update_standalone_file_service(
         unique_filename = f"standalone_files/{file_id}{file_ext}"
 
 
-        index = get_pinecone_index()
+        index =await get_pinecone_index()
         index.delete(filter={"file_id": file_id})
 
         await process_uploaded_file(
@@ -318,8 +450,8 @@ async def update_standalone_file_service(
         existing_file.gcs_path = unique_filename
         existing_file.category = category_to_use
         existing_file.uploaded_at = datetime.utcnow()
-        db.commit()
-        db.refresh(existing_file)
+        await db.commit()                              
+        await db.refresh(existing_file)
 
         return {
             "file_id": existing_file.file_id,
@@ -345,19 +477,18 @@ async def delete_simple_file_service(
     file_id: str,
     category: Optional[str],
     current_user,
-    db: Session
+    db: AsyncSession
 ):
 
 
-    query = db.query(StandaloneFile).filter(StandaloneFile.file_id == file_id)
 
+    stmt = select(StandaloneFile).where(StandaloneFile.file_id == file_id)
     if building_id:
-        query = query.filter(StandaloneFile.building_id == building_id)
-
+        stmt = stmt.where(StandaloneFile.building_id == building_id)
     if category:
-        query = query.filter(StandaloneFile.category == category)
+        stmt = stmt.where(StandaloneFile.category == category)
 
-    file_record = query.first()
+    file_record = (await db.execute(stmt)).scalar_one_or_none()  
 
     if not file_record:
         raise HTTPException(status_code=404, detail=f"File with id {file_id} not found")
@@ -365,7 +496,7 @@ async def delete_simple_file_service(
     if current_user.role != "admin" and file_record.company_id != current_user.company_id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this file")
     try:
-        index = get_pinecone_index()
+        index =await get_pinecone_index()
         index.delete(filter={"file_id": file_id})
         logger.info(f"Deleted vectors for file_id {file_id} from Pinecone")
     except Exception as e:
@@ -380,8 +511,8 @@ async def delete_simple_file_service(
         logger.error(f"Failed to delete local file {file_record.gcs_path}: {e}")
 
     try:
-        db.delete(file_record)
-        db.commit()
+        await db.delete(file_record)                   
+        await db.commit()
         logger.info(f"Deleted file record {file_id} from database")
     except Exception as e:
         db.rollback()
@@ -400,3 +531,84 @@ async def delete_simple_file_service(
         gcs_path=file_record.gcs_path, 
         building_id=str(file_record.building_id) if file_record.building_id else ""
     )
+
+
+# async def process_query_with_memory(req, current_user, history: List[Dict[str, str]]):
+    model = gen.GenerativeModel("gemini-2.0-flash")
+
+    # Step 1: Classify query
+    classification_prompt = CLASSIFICATION_PROMPT.format(query=req.question)
+    classification_response = model.generate_content(classification_prompt)
+    classification = classification_response.text.strip().lower() if classification_response else "retrieval"
+    logger.info(f"Query classified as: {classification}")
+
+    # Step 2: Handle "general" category
+    if classification == "general":
+        # Combine last 5 exchanges for context
+        conversation_context = "\n".join(
+            [f"{m['role'].capitalize()}: {m['content']}" for m in history[-5:]]
+        )
+        prompt = f"""
+        {GENERAL_PROMPT_TEMPLATE}
+
+        Conversation History:
+        {conversation_context}
+
+        User Question: {req.question}
+        """
+        response = model.generate_content(prompt)
+        answer = response.text.strip() if response and response.text else "No answer generated."
+        return answer, 1.0, classification
+
+    # Step 3: Retrieval category (RAG mode)
+    query_emb = await get_embedding(req.question, google_api_key)
+    index = await get_pinecone_index()
+
+    filter_metadata = {"company_id": str(current_user.company_id)}
+    optional_filters = {
+        "category": getattr(req, "category", None),
+        "tenant_name": getattr(req, "tenant_name", None),
+        "floor": getattr(req, "floor", None),
+        "building_id": getattr(req, "building_id", None),
+    }
+    for key, value in optional_filters.items():
+        if value and str(value).strip():
+            filter_metadata[key] = str(value)
+
+    logger.info(f"Applying Pinecone filter: {filter_metadata}")
+    result = index.query(
+        vector=query_emb,
+        top_k=6,
+        include_metadata=True,
+        filter=filter_metadata,
+    )
+
+    if not result["matches"]:
+        return "The information is not available in the provided documents.", 0.0, classification
+
+    scores = [m["score"] for m in result["matches"]]
+    confidence_score = float(max(scores))
+    contexts = [m["metadata"]["chunk"] for m in result["matches"]]
+    combined_context = "\n".join(contexts)[:9000]
+
+    # Add conversation memory to prompt
+    history_context = "\n".join(
+        [f"{m['role'].capitalize()}: {m['content']}" for m in history[-5:]]
+    )
+
+    prompt = f"""
+    {system_prompt}
+
+    Conversation History:
+    {history_context}
+
+    Document Excerpts:
+    {combined_context}
+
+    Client's Question:
+    {req.question}
+    """
+
+    response = model.generate_content(prompt)
+    answer = response.text.strip() if response and response.text else "No answer generated."
+    return answer, confidence_score, classification

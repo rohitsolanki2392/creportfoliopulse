@@ -265,7 +265,7 @@ class UserFeedback(Base):
     user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
     company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
     feedback = Column(Text, nullable=False)
-    rating = Column(Integer, nullable=True)  # optional: 1–5 rating scale
+    rating = Column(Integer, nullable=True) 
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", foreign_keys=[user_id])

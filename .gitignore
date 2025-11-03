@@ -1,6 +1,4 @@
-# ----------------------
-# Project Specific
-# ----------------------
+
 uploads/
 faiss_index_*
 filemetadata.json
@@ -9,7 +7,7 @@ file_metadata.json
 *.db
 *.log
 
-# Credentials and Keys
+
 .env
 *.json
 *.pem
@@ -19,9 +17,7 @@ gcp-keys/
 gen-lang-client-*.json
 sunny-airfoil-*.json
 
-# ----------------------
-# Python
-# ----------------------
+
 __pycache__/
 *.py[cod]
 *.pyo
@@ -30,58 +26,40 @@ __pycache__/
 *.egg-info/
 *.dist-info/
 
-# ----------------------
-# Virtual Environment
-# ----------------------
 venv/
 .venv/
 ENV/
 env/
 myenv/
 
-# ----------------------
-# Build / Distribution
-# ----------------------
+
 dist/
 build/
 .eggs/
 *.whl
 
-# ----------------------
-# IDE / Editor
-# ----------------------
+
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# ----------------------
-# Alembic
-# ----------------------
+
 alembic/
 alembic.ini
 alembic/versions/
 
-# ----------------------
-# OS Files
-# ----------------------
+
 .DS_Store
 Thumbs.db
 
-# ----------------------
-# Docker
-# ----------------------
+
 *.dockerignore
 
-# ----------------------
-# Local Tools
-# ----------------------
 cloud_sql_proxy
 cloud_sql_proxy.exe
 
-# ----------------------
-# App-specific caches
-# ----------------------
+
 app/__pycache__/
 app/crud/__pycache__/
 app/router/__pycache__/
@@ -90,7 +68,5 @@ app/services/__pycache__/
 app/utils/__pycache__/
 
 test.py
-# ----------------------
-# Archives
-# ----------------------
+
 *.zip

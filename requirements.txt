@@ -40,3 +40,6 @@ google-cloud-aiplatform
 PyPDF2
 google-generativeai
 google-genai
+aiosmtplib 
+docx
+asyncpg

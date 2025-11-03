@@ -37,12 +37,10 @@ Now extract these three fields from this text (limit: first 2500 characters):
         response = await llm.ainvoke([{"role": "user", "content": prompt}])
         content = response.content.strip()
 
-        # Clean JSON fences if present
+
         content = content.replace("```json", "").replace("```", "").strip()
 
         data = json.loads(content)
-        print("Extracted Metadata:", data)
-        print("____________________________________________")
         return {
             "tenant_name": data.get("tenant_name", "").strip(),
             "building": data.get("building", "").strip(),
@@ -50,7 +48,6 @@ Now extract these three fields from this text (limit: first 2500 characters):
         }
 
     except Exception as e:
-        print(f"[Metadata Extraction Error] {e}")
         return {
             "tenant_name": "",
             "building": "",

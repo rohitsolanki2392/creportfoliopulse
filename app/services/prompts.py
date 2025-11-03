@@ -1,8 +1,6 @@
-import json
-import re
-from typing import List
-import google.generativeai as gen
-def get_ai_insights_prompt(analytics_data):
+
+
+async def get_ai_insights_prompt(analytics_data):
     return f"""
     You are an expert data analyst. Generate concise AI-driven insights based on the following analytics data:
     - Chat Sessions: {analytics_data['chat_sessions']}
@@ -12,7 +10,7 @@ def get_ai_insights_prompt(analytics_data):
     Provide insights as well structured text.
     """
 
-def get_usage_trends_prompt(daily_login_activity, activity_categories):
+async def get_usage_trends_prompt(daily_login_activity, activity_categories):
     return f"""
     You are an expert data analyst. Analyze the following usage data:
     - Daily Login Activity: {daily_login_activity}
@@ -24,10 +22,11 @@ def get_usage_trends_prompt(daily_login_activity, activity_categories):
     }}
     """
 
-def get_recent_questions_prompt(question_texts):
+async def get_recent_questions_prompt(question_texts):
+    question_texts_str = ', '.join(question_texts) if question_texts else 'No recent questions available.'
     return f"""
     Summarize the following recent questions from users:
-    {', '.join(question_texts) if question_texts else 'No recent questions available.'}
+    {question_texts_str}
     Provide the answer ONLY in Plain text format:
     {{
         "summary": "short summary text",
@@ -35,8 +34,7 @@ def get_recent_questions_prompt(question_texts):
     }}
     """
 
-
-def build_feedback_classification_prompt(feedback_list: list[str]) -> str:
+async def build_feedback_classification_prompt(feedback_list: list[str]) -> str:
     feedback_texts = "\n".join([f"- {f}" for f in feedback_list if f])
     prompt = f"""
     You are analyzing customer feedback for a real estate platform.
@@ -54,20 +52,18 @@ def build_feedback_classification_prompt(feedback_list: list[str]) -> str:
 
 
 
+
 GENERAL_PROMPT_TEMPLATE = """
-You are Portfolio Pulse, a friendly and knowledgeable real estate advisor helping clients understand apartments, leases, 
-and real estate concepts.
-Respond directly to the user’s question based on your general real estate knowledge — 
-not specific uploaded documents.
-If the user greets you (e.g., “hi”, “hello”, “good morning”), 
-reply warmly and briefly (1–2 sentences max). Be polite, professional, and conversational.
-If the question is informational, provide a concise, accurate, and client-friendly explanation.
+You are Portfolio Pulse, a friendly and knowledgeable real estate advisor helping clients understand apartments, leases, and real estate concepts.
 
-User Query:
-{query}
-
-Your Response:
-"""
+STRICT RULES:
+- Answer ONLY using your built-in general real estate knowledge (e.g., what is a lease, rent escalation, amenities).
+- NEVER use internet, Google, search, tools, or external data** - even for "first-time" questions.
+- If question is NOT about real estate/apartments/leases/buildings: Politely refuse - "Sorry, I specialize in real estate only. Ask me about apartments or leases!"
+- Greetings: Reply warmly, briefly (1-2 sentences).
+- Informational: Concise, accurate, client-friendly.
+User Query: {query}
+Your Response:"""
 
 
 CLASSIFICATION_PROMPT = """

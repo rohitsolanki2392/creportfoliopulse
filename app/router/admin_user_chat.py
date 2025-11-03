@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends,UploadFile, File, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from app.database.db import get_db
 from app.models.models import  User
@@ -14,7 +14,7 @@ async def upload_categorized_files(
     files: List[UploadFile] = File(...),
     category: str = Query(...),
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     
     return await upload_standalone_files_service(files, category, current_user, db)
@@ -27,7 +27,7 @@ async def update_file(
     file: UploadFile = File(...),               
     building_id: Optional[int] = Query(None),
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     
     return await update_standalone_file_service(
@@ -45,7 +45,7 @@ async def list_categorized_files(
     building_id: Optional[int] = Query(None),
     category: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
    
     response = await list_simple_files_service(building_id, category, current_user, db)
@@ -70,7 +70,7 @@ async def delete_categorized_file(
     file_id: str = Query(...),
     category: Optional[str] = Query(None),
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     return await delete_simple_file_service(building_id, file_id, category, current_user, db)
 
@@ -81,7 +81,7 @@ async def delete_categorized_file(
 async def get_chat_history(
     session_id: str = Query(...),
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Fetch chat history for admin using existing service function.

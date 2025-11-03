@@ -1,6 +1,6 @@
 import os
 from fastapi import APIRouter, Depends, UploadFile, File, Form, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from app.database.db import get_db
 from app.models.models import User
@@ -18,7 +18,7 @@ async def upload_lease_doc(
     building_id: int = Form(...),
     category: str = Form(...),
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
         return await upload_standalone_files_service(
         files, category, current_user, db, building_id=building_id
@@ -29,7 +29,7 @@ async def list_files(
     building_id: Optional[int] = Query(None),
     category: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     return await list_simple_files_service(building_id, category, current_user, db)
 
@@ -37,7 +37,7 @@ async def list_files(
 async def ask_question(
     req: AskQuestionRequest,
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):  
     return await ask_simple_service(req, current_user, db)
 
@@ -45,7 +45,7 @@ async def ask_question(
 @router.get("/chat/sessions/")
 async def list_chat_sessions(
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     return await list_chat_sessions_service(current_user, db)
 
@@ -55,7 +55,7 @@ async def list_chat_sessions(
 async def get_session_history(
     session_id: str = Query(...),
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     return await get_session_history_service(session_id, current_user, db)
 
@@ -63,7 +63,7 @@ async def get_session_history(
 async def delete_session(
     session_id: str = Query(...),
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     return await delete_session_service(session_id, current_user, db)
 
@@ -74,7 +74,7 @@ async def update_file(
     building_id: Optional[int] = Form(None),
     category: Optional[str] = Form(None),
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     return await update_standalone_file_service(file_id, new_file, current_user, db, building_id, category)
 
@@ -85,6 +85,6 @@ async def delete_file(
     file_id: str = Query(...),
     category: Optional[str] = Query(None),
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     return await delete_simple_file_service(building_id, file_id,category, current_user, db)
