@@ -1,10 +1,11 @@
 import docx
 import asyncio
+import docx
+import asyncio
+
+
 
 async def extract_docx_text(docx_path: str) -> str:
-    """
-    Extracts text from a DOCX file, preserving headings, paragraphs, and table content.
-    """
     def extract_sync():
         doc = docx.Document(docx_path)
         full_text = []
@@ -61,3 +62,6 @@ async def extract_docx_text(docx_path: str) -> str:
         return '\n'.join(cleaned_text).rstrip()
 
     return await asyncio.to_thread(extract_sync)
+
+
+

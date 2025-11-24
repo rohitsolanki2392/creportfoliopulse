@@ -16,7 +16,7 @@ file_metadata.json
 gcp-keys/
 gen-lang-client-*.json
 sunny-airfoil-*.json
-
+.json
 
 __pycache__/
 *.py[cod]
@@ -32,6 +32,7 @@ ENV/
 env/
 myenv/
 
+temps/
 
 dist/
 build/

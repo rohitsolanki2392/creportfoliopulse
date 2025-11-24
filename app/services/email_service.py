@@ -10,6 +10,11 @@ from app.models.models import OTP
 from fastapi import HTTPException
 from app.config import EMAIL_PASSWORD, EMAIL_SENDER, SMTP_PORT, SMTP_SERVER
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+logger = logging.getLogger(__name__)
+
+
 def generate_otp() -> str:
     return ''.join(random.choices(string.digits, k=6))
 
@@ -19,13 +24,14 @@ async def send_otp_email(email: str, otp: str):
         msg = EmailMessage()
         subject = "Your Code for Verification"
         msg.set_content(f"""
-Hello,
-Your OTP for verification is: {otp}
-This OTP will expire in 10 minutes.
-If you didn't request this, please ignore this email.
-Best regards,
-Your App Team
-""")
+            Hello,
+            Your OTP for verification is: {otp}
+            This OTP will expire in 10 minutes.
+            If you didn't request this, please ignore this email.
+            Best regards,
+            Your App Team
+            """
+        )
         msg['Subject'] = subject
         msg['From'] = EMAIL_SENDER
         msg['To'] = email
@@ -39,7 +45,7 @@ Your App Team
             password=EMAIL_PASSWORD
         )
     except Exception as e:
-        print(f"Error sending email: {e}")
+        logger.error(f"Error sending email: {e}")
 
 
 

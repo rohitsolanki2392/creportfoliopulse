@@ -13,3 +13,4 @@ class UserListResponse(BaseModel):
     name: str
     created: datetime
     actions: List[str]
+    gemini_status: bool

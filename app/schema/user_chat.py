@@ -6,6 +6,13 @@ class AskSimpleQuestionRequest(BaseModel):
     session_id: str
     question: str
     category: str
+    buiding_id: Optional[int] = None
+
+class AskSummaryChatRequest(BaseModel):
+    session_id: str
+    question: str
+    file_id: str
+    category: str
 
 class StandaloneFileResponse(BaseModel):
     file_id: str

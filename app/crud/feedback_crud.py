@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from typing import List, Optional
+from typing import List
 from app.models.models import UserFeedback, User
 from app.schema.feedback_schema import FeedbackCreate
 

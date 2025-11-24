@@ -58,7 +58,9 @@ async def list_invited_users(
             "display": f"{user.name} ({user.role.capitalize()})",
             "name": user.name,
             "created": user.created_at,
-            "actions": ["edit", "delete"]
+            "actions": ["edit", "delete"],
+            "gemini_status": user.gemini_chat_enabled
+            
         })
 
     return user_list

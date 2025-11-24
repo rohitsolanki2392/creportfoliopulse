@@ -1,18 +1,13 @@
-
 import asyncio
 import time
 from typing import  Optional
-from fastapi import HTTPException
-
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.crud.user_chatbot_crud import get_or_create_chat_session, get_user_chat_history, save_chat_history, save_standalone_file
-from app.models.models import  StandaloneFile
+from app.crud.user_chatbot_crud import get_or_create_chat_session, save_chat_history, save_standalone_file
+from app.models.models import  StandaloneFile, User
 from app.schema.chat_bot_schema import FileItem, ListFilesResponse
-from app.schema.user_chat import StandaloneFileResponse
+from app.schema.user_chat import AskSummaryChatRequest, StandaloneFileResponse
 from app.utils.process_file import get_embedding, get_pinecone_index, save_to_temp, process_uploaded_file
 from datetime import datetime
-
 import logging
 from uuid import uuid4
 import os
@@ -23,8 +18,16 @@ from datetime import datetime
 from app.models.models import StandaloneFile
 from app.config import google_api_key
 from app.utils.process_file import get_pinecone_index, process_uploaded_file, save_to_temp
-from app.services.prompts import  CLASSIFICATION_PROMPT, GENERAL_PROMPT_TEMPLATE, system_prompt
+from app.services.prompts import  CLASSIFICATION_PROMPT, GENERAL_PROMPT_TEMPLATE, SYSTEM_PROMPT,summary_system_prompt
 from app.config import SUPPORTED_EXT
+from sqlalchemy.future import select
+import google.generativeai as gen
+
+
+
+gen.configure(api_key=google_api_key)
+
+
 logger = logging.getLogger(__name__)
 
 def human_readable_size(size_in_bytes: int) -> str:
@@ -44,9 +47,14 @@ async def upload_standalone_files_service(
     db: AsyncSession,
     building_id: Optional[int] = None 
 ):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Only admins can upload categorized files")
-    company_id = current_user.company_id
+    if not (
+        current_user.role == "admin" or
+        (current_user.role == "user" and category == "Gemini")
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="You are not allowed to upload files for this category."
+        )
 
     uploaded_files = []
 
@@ -67,9 +75,15 @@ async def upload_standalone_files_service(
                 continue
             unique_filename = f"standalone_files/{file_id}{file_ext}"
 
+
             await process_uploaded_file(
-                temp_path, file.filename, file_id, google_api_key, category, company_id, building_id=building_id
-            )
+    file_path=temp_path,
+    filename=file.filename,
+    file_id=file_id,
+    category=category,
+    company_id=current_user.company_id,
+    building_id=building_id
+)
 
             saved_file = await save_standalone_file(
                 db=db,
@@ -79,7 +93,7 @@ async def upload_standalone_files_service(
                 category=category,
                 gcs_path=unique_filename, 
                 file_size=str(file_size),
-                company_id=company_id,
+                company_id=current_user.company_id,
                 building_id=building_id
             )
 
@@ -107,251 +121,293 @@ async def upload_standalone_files_service(
     
     return uploaded_files
 
-import time
-import re
-import json
-import numpy as np
-import google.generativeai as gen
-from fastapi import HTTPException
-
-
-gen.configure(api_key=google_api_key)
-
-from sqlalchemy.future import select
 
 async def ask_simple_service(req, current_user, db):
-    if not google_api_key:
-        raise HTTPException(500, "Google API key missing")
-    if not req.question.strip():
+    if not req.question or not req.question.strip():
         raise HTTPException(400, "Question cannot be empty")
-    logger.info(f"Received question: '{req.question}'")
+
+    logger.info(f"Question from user {current_user.id}: {req.question}")
     start_time = time.time()
+
     model = gen.GenerativeModel("gemini-2.0-flash")
 
     try:
-        classification_prompt = CLASSIFICATION_PROMPT.format(query=req.question)
-        classification_response = model.generate_content(classification_prompt)
-        classification = classification_response.text.strip().lower() if classification_response else "retrieval"
+        
+        classification = "retrieval"  
+        try:
+            resp = await asyncio.to_thread(
+                model.generate_content,
+                CLASSIFICATION_PROMPT.format(query=req.question),
+                generation_config={"temperature": 0.0, "max_output_tokens": 10}
+            )
+            text = resp.text.strip().lower()
+            if text in ["general", "retrieval"]:
+                classification = text
+        except Exception as e:
+            logger.warning(f"Classification failed: {e}")
 
         logger.info(f"Query classified as: {classification}")
 
+
         if classification == "general":
-            general_prompt = GENERAL_PROMPT_TEMPLATE.format(query=req.question)
-            response = model.generate_content(general_prompt)
-            answer = response.text.strip() if response and response.text else "No answer generated."
-            confidence_score = 1.0 
-            combined_context = ""
+            prompt = GENERAL_PROMPT_TEMPLATE.format(query=req.question)
+            response = await asyncio.to_thread(model.generate_content, prompt)
+            answer = response.text.strip() or "I'm here to help with your real estate documents!"
+            confidence = 1.0
+            sources_used = 0
 
+  
         else:
+           
             query_emb = await get_embedding(req.question, google_api_key)
-            index =await get_pinecone_index()
+            index = await get_pinecone_index()
 
+           
             filter_metadata = {"company_id": str(current_user.company_id)}
-            optional_filters = {
-                "category": getattr(req, "category", None),
-                "tenant_name": getattr(req, "tenant_name", None),
-                "floor": getattr(req, "floor", None),
-                "building_id": getattr(req, "building_id", None),
-            }
-            for key, value in optional_filters.items():
-                if value and str(value).strip():
-                    filter_metadata[key] = str(value)
+            optional_fields = ["category", "building_id", "doc_type", "primary_entity_value"]
+            for field in optional_fields:
+                val = getattr(req, field, None)
+                if val and str(val).strip():
+                    filter_metadata[field] = str(val).strip()
 
-            logger.info(f"Applying Pinecone filter: {filter_metadata}")
-            result = index.query(
+            logger.info(f"Pinecone filter: {filter_metadata}")
+
+           
+            results = index.query(
                 vector=query_emb,
-                top_k=6,
+                top_k=50, 
                 include_metadata=True,
                 filter=filter_metadata,
             )
 
-            if not result["matches"]:
-                answer = "The information is not available in the provided documents."
-                confidence_score = 0.0
-                combined_context = ""
+            matches = results.get("matches", [])
+            if not matches:
+                answer = "I couldn't find relevant information in your uploaded documents."
+                confidence = 0.0
+                sources_used = 0
             else:
-                scores = [m["score"] for m in result["matches"]]
-                confidence_score = float(max(scores))
-                contexts = [m["metadata"]["chunk"] for m in result["matches"]]
-                combined_context = "\n".join(contexts)
+                
+                matches.sort(key=lambda m: m.get("score", 0), reverse=True)
 
-                if len(combined_context) > 9000:
-                    combined_context = combined_context[:9000]
+                relevant_chunks = []
+                contexts = []
+                source_titles = set()
+                for match in matches:
+                    metadata = match.get("metadata", {})
+                    full_text = metadata.get("text", "")
+                    title = metadata.get("chunk_title", "Document Section")
 
-                prompt = system_prompt.format(context=combined_context, query=req.question)
-                response = model.generate_content(prompt)
-                answer = response.text.strip() if response and response.text else "No answer generated."
+                    if full_text and len(full_text.strip()) > 50:
+                        contexts.append(full_text.strip())
+                        relevant_chunks.append(match)
+                        source_titles.add(title)
+
+                    if len(relevant_chunks) >= 8:
+                        break
+
+                combined_context = "\n\n".join(contexts)
+                if len(combined_context) > 28_000:
+                    combined_context = combined_context[:28_000] + "\n\n... (truncated)"
+
+            
+                final_prompt = SYSTEM_PROMPT.format(context=combined_context, query=req.question)
+                response = await asyncio.to_thread(model.generate_content, final_prompt)
+                answer = response.text.strip()
+
+                confidence = max(m.get("score", 0) for m in relevant_chunks) if relevant_chunks else 0.0
+                sources_used = len(relevant_chunks)
+
+                if source_titles and len(source_titles) <= 4:
+                    answer += "\n\nSources:\n" + "\n".join(f"• {t}" for t in source_titles)
+
+     
+        end_time = time.time()
+        response_time = round(end_time - start_time, 3)
+
+        session = await get_or_create_chat_session(
+            db, req.session_id, current_user.id, req.category or "general", current_user.company_id
+        )
+
+        await save_chat_history(
+            db=db,
+            session_id=session.id,
+            user_id=current_user.id,
+            file_id=None,
+            question=req.question,
+            answer=answer,
+            company_id=current_user.company_id,
+            response_time=response_time,
+            confidence=confidence,
+            response_json={
+                "classification": classification,
+                "sources_used": sources_used,
+                "confidence": round(confidence, 3),
+            },
+        )
+
+        return {
+            "session_id": req.session_id,
+            "question": req.question,
+            "answer": answer,
+            "confidence": round(confidence, 3),
+            "classification": classification,
+            "response_time": response_time,
+            "sources_used": sources_used,
+        }
 
     except Exception as e:
-        logger.error(f"Failed to process query: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to generate response")
+        logger.error(f"RAG Error: {str(e)}", exc_info=True)
+        raise HTTPException(500, "Sorry, I couldn't process your request right now.")
 
+# app/services/user_chatbot_service.py
 
-    end_time = time.time()
-    response_time = round(end_time - start_time, 3)
+async def ask_summary_chat_service(req, current_user,db):
+    if not google_api_key:
+        logger.error("Google API key missing")
+        raise HTTPException(500, "Google API key missing")
+    if not req.question or not req.question.strip():
+        logger.warning("Empty question received")
+        raise HTTPException(400, "Question cannot be empty")
 
-    session = await get_or_create_chat_session(
-        db, req.session_id, current_user.id, req.category, current_user.company_id
-    )
+    logger.info(f"Processing summary chat | Question: '{req.question}' | file_id: {req.file_id}")
+    start_time = time.time()
+    model = gen.GenerativeModel("gemini-2.0-flash")  
 
-    await save_chat_history(
-        db=db,
-        session_id=session.id,
-        user_id=current_user.id,
-        file_id=None,
-        question=req.question,
-        answer=answer,
-        company_id=current_user.company_id,
-        response_time=response_time,
-        confidence=confidence_score,
-        response_json={
+    try:
+    
+        classification = "retrieval"
+        try:
+            resp = await asyncio.to_thread(
+                model.generate_content,
+                CLASSIFICATION_PROMPT.format(query=req.question),
+                generation_config={"temperature": 0.0, "max_output_tokens": 10}
+            )
+            text = resp.text.strip().lower()
+            if text in ["general", "retrieval"]:
+                classification = text
+        except Exception as e:
+            logger.warning(f"Classification failed for '{req.question}': {e}")
+
+        logger.info(f"Query classified as: {classification}")
+
+        answer = ""
+        confidence = 0.0
+        combined_context = ""
+
+        if classification == "general":
+            # Direct LLM answer without retrieval
+            prompt = GENERAL_PROMPT_TEMPLATE.format(query=req.question)
+            response = await asyncio.to_thread(model.generate_content, prompt)
+            answer = response.text.strip() or "No answer generated."
+            confidence = 1.0
+
+        else:
+            # === RETRIEVAL PATH ===
+            query_emb = await get_embedding(req.question, google_api_key)
+            index = await get_pinecone_index()
+
+            # Build filter exactly like your working ask_simple_service
+            filter_metadata = {"company_id": str(current_user.company_id)}
+
+            if req.category and str(req.category).strip():
+                filter_metadata["category"] = str(req.category).strip()
+            if req.file_id and str(req.file_id).strip():
+                filter_metadata["file_id"] = str(req.file_id).strip()
+
+            # Remove any None values
+            filter_metadata = {k: v for k, v in filter_metadata.items() if v is not None}
+
+            logger.info(f"Pinecone filter applied: {filter_metadata}")
+
+            results = index.query(
+                vector=query_emb,
+                top_k=50,
+                include_metadata=True,
+                filter=filter_metadata,
+            )
+
+            matches = results.get("matches", [])
+            logger.info(f"Pinecone returned {len(matches)} matching chunks")
+
+            if not matches:
+                answer = "No relevant information found in the summary."
+                confidence = 0.0
+            else:
+                matches.sort(key=lambda m: m.get("score", 0), reverse=True)
+                contexts = []
+                relevant_matches = []
+                source_titles = set()
+
+                for match in matches:
+                    metadata = match.get("metadata", {})
+                    # CRITICAL FIX: was "chunk", now "text" — matches your upsert!
+                    chunk_text = metadata.get("text", "").strip()
+                    title = metadata.get("chunk_title", "Document Section")
+
+                    if chunk_text and len(chunk_text) > 50:
+                        contexts.append(chunk_text)
+                        relevant_matches.append(match)
+                        source_titles.add(title)
+
+                    if len(relevant_matches) >= 8:
+                        break
+
+                combined_context = "\n\n".join(contexts)
+                if len(combined_context) > 28_000:
+                    combined_context = combined_context[:28_000] + "\n\n... (truncated)"
+
+                logger.info(f"Combined context length: {len(combined_context)} characters")
+
+                final_prompt = summary_system_prompt.format(context=combined_context, query=req.question)
+                response = await asyncio.to_thread(model.generate_content, final_prompt)
+                answer = response.text.strip() or "No answer generated."
+                confidence = max(m.get("score", 0) for m in relevant_matches) if relevant_matches else 0.0
+
+                if source_titles and len(source_titles) <= 4:
+                    answer += "\n\nSources:\n" + "\n".join(f"• {t}" for t in source_titles)
+
+        # === RESPONSE TIME & SAVE HISTORY ===
+        response_time = round(time.time() - start_time, 3)
+        logger.info(f"Summary chat processed in {response_time}s | Confidence: {confidence:.3f}")
+
+        session = await get_or_create_chat_session(
+            db=db,
+            session_id=req.session_id,
+            user_id=current_user.id,
+            category=req.category or "general",
+            company_id=current_user.company_id
+        )
+
+        await save_chat_history(
+            db=db,
+            session_id=session.id,
+            user_id=current_user.id,
+            file_id=req.file_id,
+            question=req.question,
+            answer=answer,
+            company_id=current_user.company_id,
+            response_time=response_time,
+            confidence=confidence,
+            response_json={
+                "answer": answer,
+                "confidence": round(confidence, 3),
+                "file_id": req.file_id,
+                "context_length": len(combined_context)
+            },
+        )
+
+        return {
+            "session_id": session.id,
+            "file_id": req.file_id,
+            "question": req.question,
             "answer": answer,
-            "confidence": confidence_score,
-            "classification": classification,
-        },
-    )
+            "confidence": round(confidence, 3),
+            "response_time": response_time,
+        }
 
-    return {
-        "session_id": req.session_id,
-        "question": req.question,
-        "answer": answer,
-        "confidence": confidence_score,
-        "classification": classification,
-        "response_time": response_time,
-    }
-
-
-# async def ask_simple_service(req, current_user, db):
-#     if not google_api_key:
-#         raise HTTPException(500, "Google API key missing")
-#     if not req.question.strip():
-#         raise HTTPException(400, "Question cannot be empty")
-
-#     logger.info(f"Received question: '{req.question}'")
-#     start_time = time.time()
-
-#     model = gen.GenerativeModel("gemini-2.0-flash")
-
-#     try:
-
-#         session = await get_or_create_chat_session(
-#             db, req.session_id, current_user.id, req.category, current_user.company_id
-#         )
-
-
-#         await save_chat_history(
-#             db=db,
-#             session_id=session.id,
-#             user_id=current_user.id,
-#             file_id=None,
-#             question=req.question,
-#             answer=None, 
-#             company_id=current_user.company_id,
-#             response_json=None,
-#             response_time=None,
-#             confidence=None,
-#         )
-
-#         history_records = await get_user_chat_history(db, session.id, current_user.id)
-#         last_15_messages = history_records[-15:] if len(history_records) > 15 else history_records
-
-
-#         gemini_history = []
-#         for h in last_15_messages:
-#             if h.question:
-#                 gemini_history.append({"role": "user", "parts": [h.question]})
-#             if h.answer:
-#                 gemini_history.append({"role": "model", "parts": [h.answer]})
-
-
-#         classification_prompt = CLASSIFICATION_PROMPT.format(query=req.question)
-#         classification_response = model.generate_content(classification_prompt)
-#         classification = (
-#             classification_response.text.strip().lower()
-#             if classification_response
-#             else "retrieval"
-#         )
-
-#         logger.info(f"Query classified as: {classification}")
-
-
-#         def _blocking_chat():
-#             chat = model.start_chat(history=gemini_history)
-#             if classification == "general":
-#                 prompt = GENERAL_PROMPT_TEMPLATE.format(query=req.question)
-#                 response = chat.send_message(prompt)
-#             else:
-#                 # Retrieval-based flow
-#                 query_emb = asyncio.run(get_embedding(req.question, google_api_key))
-#                 index = asyncio.run(get_pinecone_index())
-
-#                 filter_metadata = {"company_id": str(current_user.company_id)}
-#                 optional_filters = {
-#                     "category": getattr(req, "category", None),
-#                     "tenant_name": getattr(req, "tenant_name", None),
-#                     "floor": getattr(req, "floor", None),
-#                     "building_id": getattr(req, "building_id", None),
-#                 }
-#                 for key, value in optional_filters.items():
-#                     if value and str(value).strip():
-#                         filter_metadata[key] = str(value)
-
-#                 logger.info(f"Applying Pinecone filter: {filter_metadata}")
-#                 result = index.query(
-#                     vector=query_emb,
-#                     top_k=6,
-#                     include_metadata=True,
-#                     filter=filter_metadata,
-#                 )
-
-#                 if not result["matches"]:
-#                     return "The information is not available in the provided documents."
-
-#                 contexts = [m["metadata"]["chunk"] for m in result["matches"]]
-#                 combined_context = "\n".join(contexts)[:9000]
-
-#                 prompt = system_prompt.format(context=combined_context, query=req.question)
-#                 response = chat.send_message(prompt)
-#             return response.text
-
-#         answer = await asyncio.to_thread(_blocking_chat)
-#         confidence_score = 1.0
-
-#     except Exception as e:
-#         logger.error(f"Failed to process query: {str(e)}")
-#         raise HTTPException(status_code=500, detail="Failed to generate response")
-
-#     end_time = time.time()
-#     response_time = round(end_time - start_time, 3)
-
-
-#     await save_chat_history(
-#         db=db,
-#         session_id=session.id,
-#         user_id=current_user.id,
-#         file_id=None,
-#         question=req.question,
-#         answer=answer,
-#         company_id=current_user.company_id,
-#         response_time=response_time,
-#         confidence=confidence_score,
-#         response_json={
-#             "answer": answer,
-#             "confidence": confidence_score,
-#             "classification": classification,
-#         },
-#     )
-
-#     return {
-#         "session_id": session.id,
-#         "question": req.question,
-#         "answer": answer,
-#         "confidence": confidence_score,
-#         "classification": classification,
-#         "response_time": response_time,
-#     }
-
-
+    except Exception as e:
+        logger.error(f"Error during summary chat: {e}", exc_info=True)
+        raise HTTPException(500, "Error processing summary chat")
 
 async def list_simple_files_service(
     building_id: Optional[int],
@@ -403,8 +459,6 @@ async def list_simple_files_service(
         building_id=building_id,
         category=category,
     )
-
-
 
 
 async def update_standalone_file_service(
@@ -479,9 +533,6 @@ async def delete_simple_file_service(
     current_user,
     db: AsyncSession
 ):
-
-
-
     stmt = select(StandaloneFile).where(StandaloneFile.file_id == file_id)
     if building_id:
         stmt = stmt.where(StandaloneFile.building_id == building_id)
@@ -531,84 +582,3 @@ async def delete_simple_file_service(
         gcs_path=file_record.gcs_path, 
         building_id=str(file_record.building_id) if file_record.building_id else ""
     )
-
-
-# async def process_query_with_memory(req, current_user, history: List[Dict[str, str]]):
-    model = gen.GenerativeModel("gemini-2.0-flash")
-
-    # Step 1: Classify query
-    classification_prompt = CLASSIFICATION_PROMPT.format(query=req.question)
-    classification_response = model.generate_content(classification_prompt)
-    classification = classification_response.text.strip().lower() if classification_response else "retrieval"
-    logger.info(f"Query classified as: {classification}")
-
-    # Step 2: Handle "general" category
-    if classification == "general":
-        # Combine last 5 exchanges for context
-        conversation_context = "\n".join(
-            [f"{m['role'].capitalize()}: {m['content']}" for m in history[-5:]]
-        )
-        prompt = f"""
-        {GENERAL_PROMPT_TEMPLATE}
-
-        Conversation History:
-        {conversation_context}
-
-        User Question: {req.question}
-        """
-        response = model.generate_content(prompt)
-        answer = response.text.strip() if response and response.text else "No answer generated."
-        return answer, 1.0, classification
-
-    # Step 3: Retrieval category (RAG mode)
-    query_emb = await get_embedding(req.question, google_api_key)
-    index = await get_pinecone_index()
-
-    filter_metadata = {"company_id": str(current_user.company_id)}
-    optional_filters = {
-        "category": getattr(req, "category", None),
-        "tenant_name": getattr(req, "tenant_name", None),
-        "floor": getattr(req, "floor", None),
-        "building_id": getattr(req, "building_id", None),
-    }
-    for key, value in optional_filters.items():
-        if value and str(value).strip():
-            filter_metadata[key] = str(value)
-
-    logger.info(f"Applying Pinecone filter: {filter_metadata}")
-    result = index.query(
-        vector=query_emb,
-        top_k=6,
-        include_metadata=True,
-        filter=filter_metadata,
-    )
-
-    if not result["matches"]:
-        return "The information is not available in the provided documents.", 0.0, classification
-
-    scores = [m["score"] for m in result["matches"]]
-    confidence_score = float(max(scores))
-    contexts = [m["metadata"]["chunk"] for m in result["matches"]]
-    combined_context = "\n".join(contexts)[:9000]
-
-    # Add conversation memory to prompt
-    history_context = "\n".join(
-        [f"{m['role'].capitalize()}: {m['content']}" for m in history[-5:]]
-    )
-
-    prompt = f"""
-    {system_prompt}
-
-    Conversation History:
-    {history_context}
-
-    Document Excerpts:
-    {combined_context}
-
-    Client's Question:
-    {req.question}
-    """
-
-    response = model.generate_content(prompt)
-    answer = response.text.strip() if response and response.text else "No answer generated."
-    return answer, confidence_score, classification

@@ -7,13 +7,13 @@ from app.models.models import User
 from app.schema.chat_bot_schema import ListFilesResponse
 from app.schema.user_chat import (
     AskSimpleQuestionRequest,
+    AskSummaryChatRequest,
     StandaloneFileResponse,
-    ChatHistoryResponse,
-    ChatSessionResponse,
 )
-from app.services.session_service import delete_session_service, get_session_history_service, list_chat_sessions_service
+
 from app.utils.auth_utils import get_current_user
 from app.services.user_chatbot_service import (
+    ask_summary_chat_service,
     upload_standalone_files_service,
     ask_simple_service,
     list_simple_files_service,
@@ -36,6 +36,23 @@ async def upload_standalone_files(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+
+
+
+@router.post("/ask_summary_chat/", response_model=dict)
+async def ask_summary_chat(
+    req: AskSummaryChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await ask_summary_chat_service(req, current_user, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process question: {str(e)}")
+
+
 @router.post("/ask_simple/", response_model=dict)
 async def ask_simple(
     req: AskSimpleQuestionRequest,
@@ -48,6 +65,8 @@ async def ask_simple(
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process question: {str(e)}")
+
+
 
 @router.get("/list_simple_files/", response_model=ListFilesResponse)
 async def list_simple_files(
@@ -68,29 +87,3 @@ async def delete_simple_file(
 ):
     return await delete_simple_file_service(building_id, file_id, category, current_user, db)
 
-    
-
-@router.get("/chat/sessions/", response_model=List[ChatSessionResponse])
-async def list_chat_sessions(
-    current_user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    return await list_chat_sessions_service(current_user, db)
-
-
-@router.get("/chat/history/", response_model=List[ChatHistoryResponse])
-async def get_session_history(
-    session_id: str = Query(...),
-    current_user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    return await get_session_history_service(session_id, current_user, db)
-    
-
-@router.delete("/chat/delete/", response_model=dict)
-async def delete_session(
-    session_id: str = Query(...),
-    current_user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    return await delete_session_service(session_id, current_user, db)

@@ -4,6 +4,11 @@ import re
 import json
 import google.generativeai as gen
 from app.services.prompts import dynamic_chunk_prompt, chunk_check_prompt
+import re
+from typing import List
+import asyncio
+
+
 async def is_structured_text(sample_text: str, google_api_key: str) -> bool:
     try:
         gen.configure(api_key=google_api_key)
@@ -24,10 +29,6 @@ async def is_structured_text(sample_text: str, google_api_key: str) -> bool:
         count = sum(1 for k in structured_keywords if k in sample_text.lower())
         return count >= 3
     
-
-import re
-from typing import List
-import asyncio
 
 async def normal_split_text(text: str, max_chars: int = 800, overlap: int = 250) -> List[str]:
 
@@ -51,7 +52,7 @@ async def dynamic_split_text(text: str, google_api_key: str, max_chars: int = 15
         start += max_chars
 
     all_chunks = []
-    for block_no, block in enumerate(text_blocks, start=1):
+    for _, block in enumerate(text_blocks, start=1):
 
         try:
             model = gen.GenerativeModel("gemini-2.0-flash")

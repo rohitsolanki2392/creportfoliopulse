@@ -1,10 +1,9 @@
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from typing import List
 from app.models.models import OTP, Building, StandaloneFile, User, ChatSession, ChatHistory, UserLogin, UserFeedback
 from app.services.prompts import build_feedback_classification_prompt
-from app.utils.llm_client import invoke_llm
+from app.utils.llm_client import invoke_llm_async
 from sqlalchemy import func
 
 
@@ -166,14 +165,13 @@ async def classify_feedback_with_llm(feedback_list: list[str]):
 
     prompt = await build_feedback_classification_prompt(feedback_list)
 
-    try:
-        result = invoke_llm(prompt, expect_json=True, fallback={"feedback": ["neutral"] * len(feedback_list)})
-        feedback_labels = result.get("feedback", [])
-        if len(feedback_labels) != len(feedback_list):
-            feedback_labels = ["neutral"] * len(feedback_list)
-        return feedback_labels
-    except Exception as e:
-        return ["neutral"] * len(feedback_list)
+    result = await invoke_llm_async(prompt, expect_json=True, fallback={"feedback": ["neutral"] * len(feedback_list)})
+    
+    feedback_labels = result.get("feedback", [])
+    if len(feedback_labels) != len(feedback_list):
+        feedback_labels = ["neutral"] * len(feedback_list)
+    
+    return feedback_labels
 
 
 async def get_rag_metrics_data(db: AsyncSession, company_id: int):

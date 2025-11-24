@@ -4,9 +4,9 @@ from typing import List, Optional
 from app.database.db import get_db
 from app.models.models import  User
 from app.schema.user_chat import StandaloneFileResponse
-from app.services.session_service import get_session_history_service
 from app.utils.auth_utils import get_current_user
 from app.services.user_chatbot_service import delete_simple_file_service, list_simple_files_service, update_standalone_file_service, upload_standalone_files_service
+
 router = APIRouter()
 
 @router.post("/upload", response_model=List[StandaloneFileResponse])
@@ -74,16 +74,3 @@ async def delete_categorized_file(
 ):
     return await delete_simple_file_service(building_id, file_id, category, current_user, db)
 
-
-
-
-@router.get("/admin/chat/history/", response_model=List[dict])
-async def get_chat_history(
-    session_id: str = Query(...),
-    current_user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Fetch chat history for admin using existing service function.
-    """
-    return await get_session_history_service(session_id, current_user, db)  

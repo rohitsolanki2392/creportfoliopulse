@@ -11,6 +11,7 @@ from app.services.prompts import lease_abstract_prompt
 from google import genai
 import asyncio
 from sqlalchemy.future import select
+
 client = genai.Client()
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -97,15 +98,14 @@ async def list_category_files_service(user_id: str, category: str, db: AsyncSess
         files = files_result.scalars().all()
 
         for file in files:
-            normalized_path = file.gcs_path.replace("\\", "/")
-            full_url = f"/{normalized_path}"
+            # Always set file_url to None
             result.append({
                 "file_id": file.file_id,
                 "original_file_name": file.original_file_name,
                 "user_id": file.user_id,
                 "uploaded_at": file.uploaded_at.isoformat(),
                 "category": file.category,
-                "file_url": full_url
+                "file_url": None
             })
 
         return {
@@ -113,18 +113,20 @@ async def list_category_files_service(user_id: str, category: str, db: AsyncSess
             "files": result,
             "total_files": len(result)
         }
+
     except Exception as e:
         return {"error": str(e)}
 
 
+
 async def delete_file_service(file_id: str, user_id: str, db: AsyncSession):
     try:
+        # Fetch file record
         file_record = await db.get(StandaloneFile, file_id)
         if not file_record or file_record.user_id != user_id:
             raise HTTPException(status_code=404, detail="File not found")
 
-        if os.path.exists(file_record.gcs_path):
-            await asyncio.to_thread(os.remove, file_record.gcs_path)
+        # No need to check or delete gcs_path, always ignore it
 
         await db.delete(file_record)
         await db.commit()
@@ -133,3 +135,4 @@ async def delete_file_service(file_id: str, user_id: str, db: AsyncSession):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+

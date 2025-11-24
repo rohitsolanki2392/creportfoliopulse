@@ -1,5 +1,5 @@
 import secrets
-from fastapi import Depends, HTTPException, status, Cookie
+from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import Optional
@@ -11,7 +11,6 @@ from app.models.models import Token, User
 from app.config import pwd_context, oauth2_scheme
 
 load_dotenv()
-
 
 
 async def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -36,19 +35,6 @@ async def create_bearer_token(db: AsyncSession, user_id: int) -> str:
     return token
 
 
-# async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
-#     credentials_exception = HTTPException(
-#         status_code=status.HTTP_401_UNAUTHORIZED,
-#         detail="Could not validate credentials",
-#         headers={"WWW-Authenticate": "Bearer"},
-#     )
-
-#     user = await auth_crud.get_user_by_token(db, token)
-#     if not user:
-#         raise credentials_exception
-
-#     return user
-
 async def get_current_user(
     db: AsyncSession = Depends(get_db),
     token: str = Depends(oauth2_scheme),
@@ -61,7 +47,7 @@ async def get_current_user(
     )
 
     # token_to_use = access_token or token 
-    # print("Using token:", access_token, token)
+
 
     token_to_use = token
 

@@ -10,7 +10,6 @@ class FeedbackCreate(BaseModel):
 class FeedbackResponse(BaseModel):
     id: int
     feedback: str
-    rating: Optional[int]
     created_at: datetime
     user_email: str
 

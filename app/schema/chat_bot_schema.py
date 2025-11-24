@@ -19,7 +19,7 @@ class FileItem(BaseModel):
     uploaded_at: datetime
     size: str
     category: Optional[str] = None
-    gcs_path: str
+    gcs_path:  Optional[str] = None
     building_id: Optional[int] = None
 
 class ListFilesResponse(BaseModel):

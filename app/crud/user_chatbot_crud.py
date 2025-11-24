@@ -3,7 +3,8 @@ from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.models.models import ChatHistory, ChatSession, StandaloneFile
-from typing import Dict
+
+
 async def save_standalone_file(
     db: AsyncSession,
     file_id: str,

@@ -1,9 +1,7 @@
-
-
 import smtplib
 from email.mime.text import MIMEText
-from dotenv import load_dotenv
 from app.config import SMTP_SERVER,SMTP_PORT,EMAIL_SENDER,EMAIL_PASSWORD
+from dotenv import load_dotenv
 load_dotenv()
 
 def send_email(to_email: str, subject: str, body: str):

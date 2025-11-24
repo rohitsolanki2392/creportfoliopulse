@@ -1,11 +1,9 @@
-import os
 from fastapi import APIRouter, Depends, UploadFile, File, Form, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from app.database.db import get_db
 from app.models.models import User
 from app.schema.chat_bot_schema import AskQuestionRequest, ListFilesResponse
-from app.services.session_service import delete_session_service, get_session_history_service, list_chat_sessions_service
 from app.utils.auth_utils import get_current_user
 
 from app.services.user_chatbot_service import ask_simple_service, delete_simple_file_service, list_simple_files_service, update_standalone_file_service, upload_standalone_files_service
@@ -41,31 +39,6 @@ async def ask_question(
 ):  
     return await ask_simple_service(req, current_user, db)
 
-
-@router.get("/chat/sessions/")
-async def list_chat_sessions(
-    current_user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    return await list_chat_sessions_service(current_user, db)
-
-
-
-@router.get("/chat/history/")
-async def get_session_history(
-    session_id: str = Query(...),
-    current_user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    return await get_session_history_service(session_id, current_user, db)
-
-@router.delete("/chat/delete/")
-async def delete_session(
-    session_id: str = Query(...),
-    current_user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    return await delete_session_service(session_id, current_user, db)
 
 @router.patch("/update_files/")
 async def update_file(

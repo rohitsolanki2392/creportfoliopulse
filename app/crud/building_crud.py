@@ -4,23 +4,49 @@ from typing import List,Optional
 from app.models.models import Building
 from app.schema.building_schema import BuildingCreate
 
-
+from typing import Optional, List
+from sqlalchemy import select
+from app.models.models import Building
+from sqlalchemy.ext.asyncio import AsyncSession
 
 async def get_building(db: AsyncSession, building_id: int) -> Optional[Building]:
     result = await db.execute(select(Building).where(Building.id == building_id))
     return result.scalars().first()
 
 
-async def get_all_buildings(db: AsyncSession, company_id: int) -> List[Building]:
-    result = await db.execute(select(Building).where(Building.company_id == company_id))
+
+
+async def get_all_buildings(
+    db: AsyncSession,
+    company_id: int,
+    category: Optional[str] = None
+) -> List[Building]:
+    query = select(Building).where(Building.company_id == company_id)
+    
+    if category:
+        query = query.where(Building.category == category)
+    
+    result = await db.execute(query)
     return result.scalars().all()
 
 
-async def get_buildings_by_owner(db: AsyncSession, owner_id: int, company_id: int) -> List[Building]:
-    result = await db.execute(
-        select(Building).where(Building.owner_id == owner_id, Building.company_id == company_id)
+async def get_buildings_by_owner(
+    db: AsyncSession,
+    owner_id: int,
+    company_id: int,
+    category: Optional[str] = None
+) -> List[Building]:
+    query = select(Building).where(
+        Building.owner_id == owner_id,
+        Building.company_id == company_id
     )
+    
+    if category:
+        query = query.where(Building.category == category)
+    
+    result = await db.execute(query)
     return result.scalars().all()
+
 
 
 async def is_building_owner(db: AsyncSession, user_id: int) -> bool:
@@ -38,10 +64,12 @@ async def create_buildings(
     created_buildings = []
     for building in buildings:
         db_building = Building(
-            address=building.address,
-            owner_id=owner_id,
-            company_id=company_id
-        )
+        address=building.address,
+        category=building.category, 
+        owner_id=owner_id,
+        company_id=company_id
+    )
+
         db.add(db_building)
         created_buildings.append(db_building)
     

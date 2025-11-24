@@ -1,11 +1,8 @@
-
-
 from fastapi import APIRouter, Depends, BackgroundTasks,Request, Form, File, UploadFile
-from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.db import get_db
 from app.models.models import User
-from app.schema.auth_schema import ForgotPassword, OTPVerify, ResetPassword, TokenResponse, UserLogin, UserProfile, UserRegister
+from app.schema.auth_schema import ForgotPassword, OTPVerify, ResetPassword, UserLogin, UserProfile, UserRegister
 from app.services.invite_service import invite_service
 from app.utils.auth_utils import get_current_user
 from app.services import auth_service
@@ -23,9 +20,6 @@ async def update_user_profile(
     current_user: User = Depends(get_current_user),
     request: Request = None
 ):
-
-
-
     updated_user, photo_base64, bg_photo_base64 = await auth_service.update_user_profile_service(
         db=db,
         current_user=current_user,
@@ -62,29 +56,14 @@ async def register_user(user: UserRegister,db: AsyncSession = Depends(get_db)):
 #     login_data = UserLogin(email=form_data.email, password=form_data.password)
 #     return await auth_service.login_user_service(login_data, db)
 
-from fastapi import Response
 
 @router.post("/login", tags=["Auth"])
 async def login_user(
     form_data: UserLogin,  
-    response: Response,  
     db: AsyncSession = Depends(get_db)
 ):
     login_data = UserLogin(email=form_data.email, password=form_data.password)
-    result = await auth_service.login_user_service(login_data, db)
-
-   
-    # response.set_cookie(
-    #     key="access_token",
-    #     value=result["access_token"],
-    #     httponly=True,          
-    #     secure=True,           
-    #     samesite="lax",         
-    #     max_age=60 * 60 * 24,    
-    #     path="/"                
-    # )
-
-   
+    result = await auth_service.login_user_service(login_data, db)  
     return {
         "message": result["message"],
         "access_token": result["access_token"],

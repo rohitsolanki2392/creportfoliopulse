@@ -1,6 +1,7 @@
 from typing import Optional
 from pydantic import BaseModel
 class BuildingCreate(BaseModel):
+    category: Optional[str] = None
     address: str
    
 class BuildingUpdate(BaseModel):

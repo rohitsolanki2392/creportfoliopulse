@@ -6,11 +6,11 @@ from typing import List, Optional, Tuple
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from app.models.models import User
+from app.models.models import Tour, User
 from fastapi import HTTPException, status, BackgroundTasks, UploadFile, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-
+from sqlalchemy import delete
 from app.crud import auth_crud
 from app.models.models import User
 from app.schema.invite_schema import UserListResponse
@@ -85,10 +85,6 @@ async def forgot_password_service(data, db: AsyncSession, background_tasks: Back
     user = await auth_crud.get_user_by_email(db, data.email)
     if not user:
         raise HTTPException(404, "User not found")
-
-    if not user.is_verified:
-        raise HTTPException(400, "Email not verified")
-
     await auth_crud.delete_existing_otps(db, data.email)
     otp_code = generate_otp()
     await auth_crud.create_otp(db, data.email, otp_code)
@@ -221,7 +217,9 @@ async def list_all_users_service(current_user: User, db: AsyncSession) -> List[U
             display=f"{u.name} ({u.role.capitalize()})",
             name=u.name,
             created=u.created_at,
-            actions=["edit", "delete"]
+            actions=["edit", "delete"],
+            gemini_status=u.gemini_chat_enabled
+
         ) for u in users
     ]
     return user_list
@@ -230,17 +228,18 @@ async def list_all_users_service(current_user: User, db: AsyncSession) -> List[U
 
 async def delete_user_service(db: AsyncSession, current_user: User, email: str):
     user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
+    
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Delete all tours by that user
+    await db.execute(delete(Tour).where(Tour.user_id == user.id))
 
-
+    # Delete user
     await db.delete(user)
     await db.commit()
 
     return {"message": f"User {user.email} deleted successfully"}
-
-
 
 async def invite_admin_service(invite_data, db: AsyncSession, background_tasks: BackgroundTasks, current_user: User):
     if current_user.role != "superuser":
@@ -293,6 +292,7 @@ async def get_user_profile_service(current_user):
         "role": current_user.role,
         "photo_url": current_user.photo_url,
         "bg_photo_url": current_user.bg_photo_url, 
+        "gemini_status": current_user.gemini_chat_enabled,
         "photo_base64": None,
         "bg_photo_base64": None  
     }
