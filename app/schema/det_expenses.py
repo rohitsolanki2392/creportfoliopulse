@@ -30,9 +30,3 @@ class DETExpenseResponse(DETExpenseBase):
 
     class Config:
         from_attributes = True
-
-
-class DETExpenseBenchmarkRequest(BaseModel):
-    sf_band: str
-    submarket: str
-    building_class: str

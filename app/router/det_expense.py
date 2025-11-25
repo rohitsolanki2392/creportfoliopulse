@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.schema.det_expenses import DETExpenseCreate, DETExpenseResponse, DETExpenseBenchmarkRequest
+from app.schema.det_expenses import DETExpenseCreate, DETExpenseResponse
 from app.crud.det_expenses import create_det_expense, get_admin_all_submissions, round4
 from app.crud.det_expenses import get_benchmark_group
 from app.database.db import get_db
@@ -36,7 +36,9 @@ async def get_submissions(
 
 @router.get("/benchmark")
 async def get_det_benchmark(
-    request: DETExpenseBenchmarkRequest,
+    sf_band: str,
+    submarket: str,
+    building_class: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -53,15 +55,15 @@ async def get_det_benchmark(
         avg_ti,
         avg_capex,
         avg_comm
-    ) = await get_benchmark_group(db, current_user.company_id, request.sf_band, request.submarket, request.building_class)
+    ) = await get_benchmark_group(db, current_user.company_id, sf_band, submarket, building_class)
 
     if count < 10:
         return {"message": "Insufficient Data for Benchmark"}
 
     return {
-        "sf_band": request.sf_band,
-        "submarket": request.submarket,
-        "building_class": request.building_class,
+        "sf_band": sf_band,
+        "submarket": submarket,
+        "building_class": building_class,
         "data_points": count,
         "benchmark": {
             "realestate_taxes_psf": round4(avg_tax),
