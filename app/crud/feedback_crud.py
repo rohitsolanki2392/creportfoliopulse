@@ -27,11 +27,12 @@ async def get_user_feedback(db: AsyncSession, user_id: int) -> List[UserFeedback
     return result.scalars().all()
 
 
-async def get_company_feedback(db: AsyncSession, company_id: int) -> List[UserFeedback]:
+async def get_company_feedback(db: AsyncSession, company_id: int) -> List[tuple]:
     result = await db.execute(
         select(UserFeedback, User.email.label("user_email"))
         .join(User, User.id == UserFeedback.user_id)
         .where(UserFeedback.company_id == company_id)
         .order_by(UserFeedback.created_at.desc())
     )
-    return result.all() 
+    return result.all()
+

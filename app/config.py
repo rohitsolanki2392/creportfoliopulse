@@ -42,6 +42,6 @@ api_key = os.getenv("PINECONE_API_KEY")
 index_name = os.getenv("PINECONE_INDEX")
 
 dimension = int(os.getenv("EMBEDDING_DIMENSION", "1536"))
-
+FIRESTORE_SECRET_KEY=os.getenv("FIRESTORE_SECRET_KEY")
 cloud = os.getenv("PINECONE_CLOUD")
 region = os.getenv("PINECONE_REGION")

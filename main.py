@@ -14,6 +14,7 @@ from app.router import (
     chat_session,
     chatbot,
     dashboard,
+    forum,
     gen_lease,
     lease_abstract,
     mail_drafting,
@@ -21,6 +22,7 @@ from app.router import (
     user_chat_bot,
     feeedback,
     gemini,
+    det_expense
 )
 
 os.environ["GRPC_VERBOSITY"] = "ERROR"
@@ -61,6 +63,8 @@ app.include_router(feeedback.router, prefix="/feedback", tags=["Feedback"])
 app.include_router(mail_drafting.router, prefix="/mail_draft", tags=["Mail Drafting"])
 app.include_router(gemini.router, prefix="/gemini", tags=["Gemini Chat"])
 app.include_router(tour.router, prefix="/tours", tags=["Tours"])
+app.include_router(forum.router, prefix="/forum", tags=["Portfolio Forum"])
+app.include_router(det_expense.router, prefix="/det_expense", tags=["Detailed Expense"])    
 @app.on_event("startup")
 async def on_startup():
     await init_db()

@@ -38,7 +38,7 @@ async def create_bearer_token(db: AsyncSession, user_id: int) -> str:
 async def get_current_user(
     db: AsyncSession = Depends(get_db),
     token: str = Depends(oauth2_scheme),
-    # access_token: str = Cookie("access_token")
+
 ) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -46,7 +46,6 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    # token_to_use = access_token or token 
 
 
     token_to_use = token

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import (
     Column,
     Integer,
+    Numeric,
     String,
     Boolean,
     DateTime,
@@ -11,6 +12,7 @@ from sqlalchemy import (
     Text,
     JSON,
     Float,
+    func,
 )
 from sqlalchemy.orm import relationship, declarative_base
 
@@ -48,6 +50,12 @@ class Company(Base):
         passive_deletes=True
     )
 
+    det_expense_submissions = relationship(
+        "DETExpenseSubmission",
+        back_populates="company",
+        cascade="all, delete-orphan",
+        passive_deletes=True
+    )
 
 
 class Status(enum.Enum):
@@ -139,7 +147,7 @@ class User(Base):
     bg_photo_url = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Relationships
+
     company = relationship("Company", back_populates="users", foreign_keys=[company_id])
 
     owned_company = relationship(
@@ -180,7 +188,32 @@ class User(Base):
         passive_deletes=True
     )
 
+class DETExpenseSubmission(Base):
+    __tablename__ = "det_expense_submissions"
 
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)            
+    
+
+    building_sf_band = Column(String, index=True)
+    submarket_geo = Column(String, index=True)
+    building_class = Column(String, index=True)
+    building_sf = Column(String)
+
+    realestate_taxes_psf = Column(Numeric)
+    property_insurance_psf = Column(Numeric)
+    utilities_psf = Column(Numeric)
+    janitorial_psf = Column(Numeric)
+    prop_mgmt_fees_psf = Column(Numeric)
+    security_psf = Column(Numeric)
+    admin_charges_psf = Column(Numeric)
+    ti_buildout_psf = Column(Numeric)
+    capex_major_psf = Column(Numeric)
+    commission_advert_psf = Column(Numeric)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), default=func.now())
+
+    company = relationship("Company", back_populates="det_expense_submissions")
 
 class OTP(Base):
     __tablename__ = "otp"

@@ -98,7 +98,7 @@ async def list_category_files_service(user_id: str, category: str, db: AsyncSess
         files = files_result.scalars().all()
 
         for file in files:
-            # Always set file_url to None
+
             result.append({
                 "file_id": file.file_id,
                 "original_file_name": file.original_file_name,
@@ -121,12 +121,12 @@ async def list_category_files_service(user_id: str, category: str, db: AsyncSess
 
 async def delete_file_service(file_id: str, user_id: str, db: AsyncSession):
     try:
-        # Fetch file record
+
         file_record = await db.get(StandaloneFile, file_id)
         if not file_record or file_record.user_id != user_id:
             raise HTTPException(status_code=404, detail="File not found")
 
-        # No need to check or delete gcs_path, always ignore it
+
 
         await db.delete(file_record)
         await db.commit()

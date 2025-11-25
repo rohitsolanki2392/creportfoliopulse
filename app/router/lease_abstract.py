@@ -23,7 +23,7 @@ router = APIRouter()
 
 genai.configure(api_key=google_api_key)
 
-#Report summarizer 
+
 @router.post("/upload/summarize")
 async def summarize(
     file: UploadFile = File(...),

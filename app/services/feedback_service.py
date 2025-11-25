@@ -9,32 +9,13 @@ from fastapi import HTTPException
 from app.utils.email import send_email
 import logging
 logger = logging.getLogger(__name__)
-# async def submit_feedback_service(db: AsyncSession, current_user, feedback_data: FeedbackCreate):
-#     if not current_user.company_id:
-#         raise HTTPException(status_code=400, detail="User is not linked to any company")
-
-#     feedback = await create_feedback(
-#         db=db,
-#         user_id=current_user.id,
-#         company_id=current_user.company_id,
-#         feedback_data=feedback_data
-#     )
-
-#     return FeedbackResponse(
-#         id=feedback.id,
-#         feedback=feedback.feedback,
-#         rating=feedback.rating,
-#         created_at=feedback.created_at,
-#         user_email=current_user.email
-#     )
-
 
 
 async def submit_feedback_service(db: AsyncSession, current_user, feedback_data: FeedbackCreate):
     if not current_user.company_id:
         raise HTTPException(status_code=400, detail="User is not linked to any company")
 
-    # Create feedback
+
     feedback = await create_feedback(
         db=db,
         user_id=current_user.id,
@@ -42,7 +23,6 @@ async def submit_feedback_service(db: AsyncSession, current_user, feedback_data:
         feedback_data=feedback_data
     )
 
-    # Send thank-you email
     try:
         send_email(
             to_email=current_user.email,
@@ -52,7 +32,7 @@ async def submit_feedback_service(db: AsyncSession, current_user, feedback_data:
     except Exception as e:
         logger.info(f"Failed to send email: {str(e)}")
 
-    # Return response
+
     return FeedbackResponse(
         id=feedback.id,
         feedback=feedback.feedback,
@@ -83,26 +63,18 @@ async def view_company_feedback_service(db: AsyncSession, current_user):
     if not current_user.company_id:
         raise HTTPException(status_code=400, detail="Admin not associated with a company")
 
-    feedbacks = await get_company_feedback(db=db, company_id=current_user.company_id)
-
-    # Filter out current user's feedback
-    other_users_feedback = [
-        f for f in feedbacks 
-        if f.UserFeedback.user_id != current_user.id
-    ]
+    feedback_rows = await get_company_feedback(db=db, company_id=current_user.company_id)
 
     return [
         FeedbackResponse(
-            id=f.UserFeedback.id,
-            feedback=f.UserFeedback.feedback,
-            rating=f.UserFeedback.rating,
-            created_at=f.UserFeedback.created_at,
-            user_email=f.user_email
+            id=fb.id,
+            feedback=fb.feedback,
+            rating=fb.rating,
+            created_at=fb.created_at,
+            user_email=user_email,
         )
-        for f in other_users_feedback
+        for fb, user_email in feedback_rows
     ]
-
-
 
 
 async def delete_user_feedback_service(db: AsyncSession, current_user, feedback_id: int) -> bool:

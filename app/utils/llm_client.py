@@ -2,15 +2,16 @@
 import json
 import re
 from typing import Any, Dict, Optional
-
+from google.genai.types import HttpOptions
 import google.generativeai as genai
 from app.config import google_api_key
 import logging
-
+from google import genai as client_genai
 logger = logging.getLogger(__name__)
 
 genai.configure(api_key=google_api_key)
 
+client = client_genai.Client(http_options=HttpOptions(api_version="v1alpha"))
 
 model = genai.GenerativeModel(
     model_name="gemini-2.0-flash",
@@ -21,10 +22,10 @@ model = genai.GenerativeModel(
 )
 
 json_model = genai.GenerativeModel(
-    model_name="gemini-2.0-flash",  # or gemini-1.5-pro for better JSON compliance
+    model_name="gemini-2.0-flash",  
     generation_config=genai.GenerationConfig(
         temperature=0.2,
-        response_mime_type="application/json",  # This is the magic!
+        response_mime_type="application/json", 
     ),
 )
 

@@ -2,12 +2,8 @@ import asyncio
 import re
 import json
 from typing import List, Dict, Any, Optional, Tuple
-# from uuid import uuid4
 from dataclasses import asdict, dataclass
 import logging
-# Keep your existing imports
-# from app.config import llm_model
-# from app.utils.embeding_utils import generate_embeddings, initialize_pinecone_index
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +36,11 @@ class FastUniversalChunker:
     async def chunk_document(self, text: str, filename: str, user_id: str, category: str, file_id: str, building_id=None):
         logger.info(f"\nProcessing: {filename} (Fast Mode)")
 
-        # === STEP 1: ONE LLM call to understand document ===
+  
         structure = await self._analyze_structure_fast(text, filename)
         logger.info(f"  Doc Type: {structure['doc_type']} | Pattern: {structure['structure_pattern']}")
 
-        # === STEP 2: Split intelligently using patterns (NO LLM per chunk) ===
+
         raw_chunks = self._split_document_smart(text, structure)
 
         if not raw_chunks:
@@ -52,12 +48,11 @@ class FastUniversalChunker:
 
         logger.info(f"  Created {len(raw_chunks)} chunks")
 
-        # === STEP 3: ONE optional LLM call for global entities (optional) ===
+ 
         global_entities = {}
         if len(raw_chunks) <= 15:  # Only if not too many chunks
             global_entities = await self._extract_global_entities_once(text, structure)
 
-        # === STEP 4: Enrich chunks fast (no LLM) ===
         enriched_chunks = []
         for idx, (chunk_text, hierarchy) in enumerate(raw_chunks):
             title = self._infer_title(chunk_text, hierarchy)
@@ -65,7 +60,7 @@ class FastUniversalChunker:
             topics = self._extract_topics_heuristic(chunk_text)
             summary = self._smart_truncate_summary(chunk_text)
 
-            # Use global entities + local heuristics
+    
             searchable = self._extract_key_fields_heuristic(chunk_text)
             primary_entity = self._guess_primary_entity(chunk_text, global_entities)
 
@@ -249,11 +244,10 @@ Preview: {text[:1800]}
         return fields
 
     def _guess_primary_entity(self, text: str, global_entities: dict):
-        # Simple fallback
+
         if "Starbucks" in text: return {"type": "tenant", "value": "Starbucks"}
         if "123 Main St" in text: return {"type": "building", "value": "123 Main St"}
         return {"type": None, "value": None}
 
     async def _extract_global_entities_once(self, text: str, structure: dict):
-        # Optional: one LLM call for whole doc if needed
         return {}

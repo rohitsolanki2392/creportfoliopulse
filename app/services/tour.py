@@ -9,7 +9,7 @@ class TourService:
         return await tour_crud.create_tour(db, data, user)
 
     async def list_company_tours(self, db: AsyncSession, user: User):
-        return await tour_crud.get_all_company_tours(db, user.company_id, user.id)
+        return await tour_crud.get_all_company_tours(db, user.company_id)
 
     
     async def delete_tour(self, db: AsyncSession, tour_id: int, user: User):

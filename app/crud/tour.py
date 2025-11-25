@@ -24,11 +24,10 @@ class TourCRUD:
         new_tour.user_email = user.email
         return new_tour
 
-    async def get_all_company_tours(self, db: AsyncSession, company_id: int, current_user_id: int):
+    async def get_all_company_tours(self, db: AsyncSession, company_id: int):
         query = (
             select(Tour)
-            .where(Tour.company_id == company_id)
-            .where(Tour.user_id != current_user_id)              
+            .where(Tour.company_id == company_id)          
         )
 
         result = await db.execute(query)

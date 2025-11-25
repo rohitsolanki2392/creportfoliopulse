@@ -58,12 +58,7 @@ system_instruction = (
     "they paste into the chat window. DO NOT provide legal or tax advice; include a professional disclaimer if necessary."
 )
 
-# PROMPT = """
-# You are a senior hedge fund analyst. Analyze the ENTIRE uploaded PDF.
-# OUTPUT ONLY CLEAN BULLET POINTS. NO MARKDOWN. NO HEADINGS. NO BOLD. NO ASTERISKS.
-# • Executive Summary: [ plain text]
-# DO NOT USE ##, **, -, *, or any Markdown. Only use • for bullets.
-# """
+
 PROMPT = """
 You are a senior hedge fund analyst. Analyze the ENTIRE uploaded PDF including charts, graphs, tables, numbers, and images.
 Your job is to output SECTIONS in CLEAN PLAIN TEXT, following these strict rules:
@@ -83,6 +78,8 @@ SUMMARY:
 • ...
 
 """
+
+
 
 
 
@@ -114,11 +111,9 @@ CRITICAL RULES - NEVER BREAK THESE:
 1. Answer EXCLUSIVELY from the document excerpts below.
 2. NEVER make up information.
 3. If the answer is not clearly stated → say: "This information is not available in the provided documents."
-4. First check: Do the excerpts refer to the correct building/property? If not → reply:
-   > "I don't have information for that building/property in the current documents."
-5. Be concise, factual, and use bullet points when helpful.
-6. Never say "According to the document" — just state the facts directly.
-7. All responses must have **unified spacing**: use single line spacing throughout, with no extra blank lines between bullets, paragraphs, or sections. All tabs and sections should appear consistent.
+4. Be concise, factual, and use bullet points when helpful.
+5. Never say "According to the document" — just state the facts directly.
+6. All responses must have **unified spacing**: use single line spacing throughout, with no extra blank lines between bullets, paragraphs, or sections. All tabs and sections should appear consistent.
 
 Document Excerpts:
 {context}

@@ -232,10 +232,10 @@ async def delete_user_service(db: AsyncSession, current_user: User, email: str):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Delete all tours by that user
+   
     await db.execute(delete(Tour).where(Tour.user_id == user.id))
 
-    # Delete user
+
     await db.delete(user)
     await db.commit()
 

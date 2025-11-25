@@ -259,7 +259,7 @@ async def ask_simple_service(req, current_user, db):
         logger.error(f"RAG Error: {str(e)}", exc_info=True)
         raise HTTPException(500, "Sorry, I couldn't process your request right now.")
 
-# app/services/user_chatbot_service.py
+
 
 async def ask_summary_chat_service(req, current_user,db):
     if not google_api_key:
@@ -295,18 +295,18 @@ async def ask_summary_chat_service(req, current_user,db):
         combined_context = ""
 
         if classification == "general":
-            # Direct LLM answer without retrieval
+
             prompt = GENERAL_PROMPT_TEMPLATE.format(query=req.question)
             response = await asyncio.to_thread(model.generate_content, prompt)
             answer = response.text.strip() or "No answer generated."
             confidence = 1.0
 
         else:
-            # === RETRIEVAL PATH ===
+
             query_emb = await get_embedding(req.question, google_api_key)
             index = await get_pinecone_index()
 
-            # Build filter exactly like your working ask_simple_service
+
             filter_metadata = {"company_id": str(current_user.company_id)}
 
             if req.category and str(req.category).strip():
@@ -314,7 +314,7 @@ async def ask_summary_chat_service(req, current_user,db):
             if req.file_id and str(req.file_id).strip():
                 filter_metadata["file_id"] = str(req.file_id).strip()
 
-            # Remove any None values
+
             filter_metadata = {k: v for k, v in filter_metadata.items() if v is not None}
 
             logger.info(f"Pinecone filter applied: {filter_metadata}")
@@ -340,7 +340,7 @@ async def ask_summary_chat_service(req, current_user,db):
 
                 for match in matches:
                     metadata = match.get("metadata", {})
-                    # CRITICAL FIX: was "chunk", now "text" — matches your upsert!
+       
                     chunk_text = metadata.get("text", "").strip()
                     title = metadata.get("chunk_title", "Document Section")
 
@@ -366,7 +366,7 @@ async def ask_summary_chat_service(req, current_user,db):
                 if source_titles and len(source_titles) <= 4:
                     answer += "\n\nSources:\n" + "\n".join(f"• {t}" for t in source_titles)
 
-        # === RESPONSE TIME & SAVE HISTORY ===
+
         response_time = round(time.time() - start_time, 3)
         logger.info(f"Summary chat processed in {response_time}s | Confidence: {confidence:.3f}")
 
