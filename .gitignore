@@ -9,7 +9,7 @@ file_metadata.json
 
 
 .env
-*.json
+file_metadata.json
 *.pem
 *.key
 *.env
