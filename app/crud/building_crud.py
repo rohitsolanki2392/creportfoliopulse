@@ -4,11 +4,6 @@ from typing import List,Optional
 from app.models.models import Building
 from app.schema.building_schema import BuildingCreate
 
-from typing import Optional, List
-from sqlalchemy import select
-from app.models.models import Building
-from sqlalchemy.ext.asyncio import AsyncSession
-
 async def get_building(db: AsyncSession, building_id: int) -> Optional[Building]:
     result = await db.execute(select(Building).where(Building.id == building_id))
     return result.scalars().first()

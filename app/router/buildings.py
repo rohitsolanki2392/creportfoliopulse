@@ -21,7 +21,7 @@ async def create_buildings(
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    # Remove the undefined 'categor'
+  
     created_buildings = await building_crud.create_buildings(
         db, buildings, current_user.id, current_user.company_id
     )
@@ -32,7 +32,7 @@ async def create_buildings(
             {
                 "id": b.id,
                 "address": b.address,
-                "category": b.category,  # <-- include category
+                "category": b.category,  
                 "owner_id": b.owner_id
             }
             for b in created_buildings

@@ -2,7 +2,6 @@ import logging
 import os
 import json
 import asyncio
-from typing import Dict, Any, List
 import aiofiles
 from fastapi import (
     APIRouter,
@@ -15,10 +14,10 @@ from fastapi import (
 )
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
 from sqlalchemy.future import select
 from app.database.db import get_db
 from app.models.models import StandaloneFile, User
+from app.schema.gen_lease import UpdateMetadataRequest
 from app.services.generate_lease_services import (
     save_file_metadata,
     extract_structured_metadata_with_llm,
@@ -44,27 +43,6 @@ logging.basicConfig(
 )
 
 router = APIRouter()
-
-
-class UpdateMetadataRequest(BaseModel):
-    file_id: str
-    structured_metadata: Dict[str, Any]
-
-
-class FindReplaceItem(BaseModel):
-    find_text: str
-    replace_text: str
-
-
-class UpdateMultipleTextRequest(BaseModel):
-    file_id: str
-    updates: List[FindReplaceItem]
-
-
-class UpdateTextRequest(BaseModel):
-    file_id: str
-    new_text: str
-
 
 
 
@@ -99,7 +77,7 @@ async def upload_file(
         saved_file = await save_file_metadata(
             db,
             file,
-            gcs_path="",
+            file_path="",
             category=category,
             current_user=current_user,
             structured_metadata=json.dumps(structured_metadata),

@@ -2,7 +2,6 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-
 from app.database.db import get_db
 from app.schema.invite_schema import InviteUserCreate, UserListResponse
 from app.services.auth_service import list_all_users_service
@@ -10,7 +9,7 @@ from app.services.invite_service import invite_service
 from app.models.models import Company, User
 from app.utils.auth_utils import get_current_user
 
-router = APIRouter()
+router = APIRouter(prefix="/invite_user", tags=["Invite User"])
 
 
 @router.post("/admin")
@@ -59,7 +58,9 @@ async def list_invited_users(
             "name": user.name,
             "created": user.created_at,
             "actions": ["edit", "delete"],
-            "gemini_status": user.gemini_chat_enabled
+            "gemini_status": user.gemini_chat_enabled,
+            "forum_status": user.forum_enabled
+
             
         })
 

@@ -1,31 +1,21 @@
-import json
+
 import os
 import logging
-import asyncio
 from typing import Dict, List, Optional, Union
 from uuid import uuid4
 from app.services.prompts import GENERAL_PROMPT_TEMPLATE, SYSTEM_PROMPT
-
 from app.utils.docx_extreactinon import extract_docx_text
 import pinecone
 import pandas as pd
 from fastapi import HTTPException
 import google.generativeai as gen
 import PyPDF2
-
-from app.config import index_name,dimension,cloud,region,model
-from app.config import api_key
-from app.config import client
-
 from typing import Optional
-from app.config import model, dimension, llm_model
 from app.utils.smarchunk import  FastUniversalChunker
 from app.utils.embeding_utils import generate_embeddings, initialize_pinecone_index
-from app.config import api_key,index_name,dimension,cloud,region
-from app.config import EMBED_BATCH_SIZE
+from app.config import api_key,index_name,dimension,cloud,region,client,api_key,model,llm_model,EMBED_BATCH_SIZE
 import time
 from uuid import uuid4
-from typing import Optional
 import asyncio
 
 logger = logging.getLogger(__name__)
@@ -34,7 +24,7 @@ async def save_to_temp(file, id, user, category) -> str:
     company_id = user.company_id
     path = None
     try:
-        dir_path = os.path.join("temps", str(company_id), category)
+        dir_path = os.path.join("uploads", str(company_id), category)
         os.makedirs(dir_path, exist_ok=True)
 
         path = os.path.join(dir_path, f"{id}_{file.filename}")
@@ -211,7 +201,6 @@ async def process_uploaded_file(
 
         logger.info(f"Generating embeddings for {len(enriched_chunks)} chunks")
         chunk_texts = [c["text"] for c in enriched_chunks]
-        logger.info(f"texts for embedding: {chunk_texts}")
         embeddings = await generate_embeddings(chunk_texts)
 
         vectors = []

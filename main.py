@@ -4,28 +4,41 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-
+from contextlib import asynccontextmanager
 from app.database.db import init_db 
 from app.router import (
     admin_actions,
     admin_user_chat,
     auth,
     buildings,
+    calc,
     chat_session,
     chatbot,
     dashboard,
+    deal_traker,
     forum,
     gen_lease,
     lease_abstract,
     mail_drafting,
+    note,
     tour,
     user_chat_bot,
     feeedback,
     gemini,
-    det_expense
+    det_expense,
+    client_ingestion_config
 )
 
+
 os.environ["GRPC_VERBOSITY"] = "ERROR"
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    ("Initializing database...")
+    await init_db()
+    print("Database initialized successfully.")
+    yield
+
 
 app = FastAPI(
     title="Building Management API",
@@ -34,6 +47,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
+    lifespan=lifespan
 )
 
 
@@ -48,14 +62,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 app.include_router(auth.router, prefix="/auth")
-app.include_router(admin_actions.router, prefix="/invite_user", tags=["Invite User"])
+app.include_router(admin_actions.router)
 app.include_router(dashboard.router, prefix="/admin", tags=["Dashboard"])
 app.include_router(lease_abstract.router, prefix="/generate_lease", tags=["AI Lease Abstract"])
 app.include_router(gen_lease.router, prefix="/gen_lease", tags=["AI Lease Generation"])
 app.include_router(user_chat_bot.router, prefix="/user", tags=["Portfolio Chatbot"])
-app.include_router(chat_session.router, prefix="/chat",tags=["Chat Sessions"])
+app.include_router(chat_session.router, prefix="/chat", tags=["Chat Sessions"])
 app.include_router(admin_user_chat.router, prefix="/admin_user_chat", tags=["Data Categories Chatbot"])
 app.include_router(buildings.router, prefix="/building_operations", tags=["Building Operations"])
 app.include_router(chatbot.router, prefix="/chatbot", tags=["Building Chatbot"])
@@ -64,22 +77,29 @@ app.include_router(mail_drafting.router, prefix="/mail_draft", tags=["Mail Draft
 app.include_router(gemini.router, prefix="/gemini", tags=["Gemini Chat"])
 app.include_router(tour.router, prefix="/tours", tags=["Tours"])
 app.include_router(forum.router, prefix="/forum", tags=["Portfolio Forum"])
-app.include_router(det_expense.router, prefix="/det_expense", tags=["Detailed Expense"])    
-@app.on_event("startup")
-async def on_startup():
-    await init_db()
-
+app.include_router(det_expense.router, prefix="/det_expense", tags=["Detailed Expense"])
+app.include_router(calc.router, prefix="/calc", tags=["Lease Finance Calculator"])
+app.include_router(note.router)
+app.include_router(deal_traker.router)
+app.include_router(client_ingestion_config.router, prefix="/space_inquiry", tags=["Client Ingestion Config"])
 
 @app.exception_handler(HTTPException)
 async def custom_http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(status_code=exc.status_code, content={"message": exc.detail})
 
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
         status_code=422,
-        content={"message": "Invalid request payload", "errors": exc.errors()},
+        content={
+            "message": "Invalid request payload",
+            "errors": exc.errors(),    
+            "body": exc.body           
+        }
     )
+
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):

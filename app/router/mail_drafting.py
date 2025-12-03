@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.database.db import get_db
 from app.models.models import User
 from app.schema.email_draft import EmailTemplateCreate, EmailTemplateRead, TenantCreate, TenantRead

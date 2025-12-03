@@ -49,7 +49,6 @@ async def send_otp_email(email: str, otp: str):
 
 
 
-logger = logging.getLogger(__name__)
 
 async def cleanup_expired_otps(db: AsyncSession):
     """Clean up expired OTP records safely."""

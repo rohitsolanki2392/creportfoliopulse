@@ -22,26 +22,27 @@ async def submit_feedback(
 ):
     return await submit_feedback_service(db, current_user, feedback_data)
 
+from typing import Optional
+from fastapi import Query
 
 @router.get("/my-feedback", response_model=list[FeedbackResponse])
 async def view_my_feedback(
+    category: Optional[str] = Query(None, description="Filter by feedback category (e.g., bug, feature, ui)"),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return await view_user_feedback_service(db, current_user)
+    return await view_user_feedback_service(db, current_user, category)
 
 
 @router.get("/company-feedback", response_model=list[FeedbackResponse])
 async def view_company_feedback(
+    category: Optional[str] = Query(None, description="Filter by feedback category"),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return await view_company_feedback_service(db, current_user)
+    return await view_company_feedback_service(db, current_user, category)
 
-
-
-
-@router.delete("/{feedback_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/")
 async def delete_feedback(
     feedback_id: int,
     db: AsyncSession = Depends(get_db),

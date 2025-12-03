@@ -91,7 +91,7 @@ async def upload_standalone_files_service(
                 file_name=file.filename,
                 user_id=current_user.id,
                 category=category,
-                gcs_path=unique_filename, 
+                file_path=unique_filename, 
                 file_size=str(file_size),
                 company_id=current_user.company_id,
                 building_id=building_id
@@ -132,8 +132,8 @@ async def ask_simple_service(req, current_user, db):
     model = gen.GenerativeModel("gemini-2.0-flash")
 
     try:
-        
-        classification = "retrieval"  
+
+        classification = "retrieval"
         try:
             resp = await asyncio.to_thread(
                 model.generate_content,
@@ -155,14 +155,14 @@ async def ask_simple_service(req, current_user, db):
             answer = response.text.strip() or "I'm here to help with your real estate documents!"
             confidence = 1.0
             sources_used = 0
+            source_files = []
 
-  
+
         else:
-           
             query_emb = await get_embedding(req.question, google_api_key)
             index = await get_pinecone_index()
 
-           
+
             filter_metadata = {"company_id": str(current_user.company_id)}
             optional_fields = ["category", "building_id", "doc_type", "primary_entity_value"]
             for field in optional_fields:
@@ -172,10 +172,9 @@ async def ask_simple_service(req, current_user, db):
 
             logger.info(f"Pinecone filter: {filter_metadata}")
 
-           
             results = index.query(
                 vector=query_emb,
-                top_k=50, 
+                top_k=50,
                 include_metadata=True,
                 filter=filter_metadata,
             )
@@ -185,31 +184,37 @@ async def ask_simple_service(req, current_user, db):
                 answer = "I couldn't find relevant information in your uploaded documents."
                 confidence = 0.0
                 sources_used = 0
+                source_files = []
             else:
-                
                 matches.sort(key=lambda m: m.get("score", 0), reverse=True)
 
-                relevant_chunks = []
                 contexts = []
-                source_titles = set()
+                relevant_chunks = []
+                source_files_set = set()
+
+
                 for match in matches:
                     metadata = match.get("metadata", {})
                     full_text = metadata.get("text", "")
-                    title = metadata.get("chunk_title", "Document Section")
+                    filename = metadata.get("filename", None)
 
                     if full_text and len(full_text.strip()) > 50:
                         contexts.append(full_text.strip())
                         relevant_chunks.append(match)
-                        source_titles.add(title)
+
+                        if filename:
+                            source_files_set.add(filename)
 
                     if len(relevant_chunks) >= 8:
                         break
+
+                source_files = list(source_files_set)
+
 
                 combined_context = "\n\n".join(contexts)
                 if len(combined_context) > 28_000:
                     combined_context = combined_context[:28_000] + "\n\n... (truncated)"
 
-            
                 final_prompt = SYSTEM_PROMPT.format(context=combined_context, query=req.question)
                 response = await asyncio.to_thread(model.generate_content, final_prompt)
                 answer = response.text.strip()
@@ -217,10 +222,10 @@ async def ask_simple_service(req, current_user, db):
                 confidence = max(m.get("score", 0) for m in relevant_chunks) if relevant_chunks else 0.0
                 sources_used = len(relevant_chunks)
 
-                if source_titles and len(source_titles) <= 4:
-                    answer += "\n\nSources:\n" + "\n".join(f"• {t}" for t in source_titles)
 
-     
+                if source_files:
+                    answer += "\n\nSources:\n" + "\n".join(f"• {f}" for f in source_files)
+
         end_time = time.time()
         response_time = round(end_time - start_time, 3)
 
@@ -242,6 +247,7 @@ async def ask_simple_service(req, current_user, db):
                 "classification": classification,
                 "sources_used": sources_used,
                 "confidence": round(confidence, 3),
+                "sources": source_files,    
             },
         )
 
@@ -253,12 +259,12 @@ async def ask_simple_service(req, current_user, db):
             "classification": classification,
             "response_time": response_time,
             "sources_used": sources_used,
+            "sources": source_files,     
         }
 
     except Exception as e:
         logger.error(f"RAG Error: {str(e)}", exc_info=True)
         raise HTTPException(500, "Sorry, I couldn't process your request right now.")
-
 
 
 async def ask_summary_chat_service(req, current_user,db):
@@ -447,7 +453,7 @@ async def list_simple_files_service(
             uploaded_at=file.uploaded_at,
             size=human_readable_size(size),
             category=file.category,
-            gcs_path=file.gcs_path,  
+            gcs_path=file.file_path,  
             building_id=file.building_id,
         ))
 
@@ -501,7 +507,7 @@ async def update_standalone_file_service(
         existing_file.original_file_name = new_file.filename
         existing_file.building_id = building_id
         existing_file.file_size = str(os.path.getsize(temp_path))
-        existing_file.gcs_path = unique_filename
+        existing_file.file_path = unique_filename
         existing_file.category = category_to_use
         existing_file.uploaded_at = datetime.utcnow()
         await db.commit()                              
@@ -553,13 +559,13 @@ async def delete_simple_file_service(
     except Exception as e:
         logger.error(f"Failed to delete Pinecone vectors for file_id {file_id}: {e}")
     try:
-        if file_record.gcs_path:  
-            local_path = os.path.join("standalone_files", os.path.basename(file_record.gcs_path))
+        if file_record.file_path:  
+            local_path = os.path.join("standalone_files", os.path.basename(file_record.file_path))
             if os.path.exists(local_path):
                 os.remove(local_path)
                 logger.info(f"Deleted local file {local_path}")
     except Exception as e:
-        logger.error(f"Failed to delete local file {file_record.gcs_path}: {e}")
+        logger.error(f"Failed to delete local file {file_record.file_path}: {e}")
 
     try:
         await db.delete(file_record)                   
@@ -571,14 +577,4 @@ async def delete_simple_file_service(
         raise HTTPException(status_code=500, detail=f"Failed to delete file from DB: {str(e)}")
 
 
-    return StandaloneFileResponse(
-        file_id=file_record.file_id,
-        original_file_name=file_record.original_file_name,
-        category=file_record.category,
-        url="", 
-        user_id=file_record.user_id,
-        uploaded_at=file_record.uploaded_at,
-        size=file_record.file_size,
-        gcs_path=file_record.gcs_path, 
-        building_id=str(file_record.building_id) if file_record.building_id else ""
-    )
+    return {"message":"File Deleted Successfully"}

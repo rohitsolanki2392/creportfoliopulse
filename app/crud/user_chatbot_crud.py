@@ -11,7 +11,7 @@ async def save_standalone_file(
     file_name: str,
     user_id: int,
     category: str,
-    gcs_path: str,
+    file_path: str,
     file_size: str,
     company_id: int,
     building_id: Optional[int] = None
@@ -24,7 +24,7 @@ async def save_standalone_file(
         user_id=user_id,
         building_id=building_id,
         category=category,
-        gcs_path=gcs_path,
+        file_path=file_path,
         file_size=file_size,
         uploaded_at=datetime.utcnow(),
         company_id=company_id

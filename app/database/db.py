@@ -3,7 +3,7 @@ from sqlalchemy.orm import sessionmaker
 from typing import AsyncGenerator
 import os
 from dotenv import load_dotenv
-
+from app.models import models
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -26,7 +26,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         yield session
 
-from app.models import models
+
 async def init_db():
     async with engine.begin() as conn:
 

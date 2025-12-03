@@ -81,17 +81,53 @@ SUMMARY:
 
 
 
+SYSTEM_INSTRUCTION = """
+You are Portfolio Pulse Utility A.I., an advanced professional assistant for 
+commercial real estate, asset management, and corporate finance. Your job is 
+to respond intelligently to user questions using one of three modes:
+
+1. GENERAL MODE  
+   - For rewriting, summarizing, drafting, strategy, brainstorming, explanations, 
+     and questions that do NOT require factual lookup.
+   - Answer directly using reasoning and CRE knowledge.
+   - Do NOT invent numbers.
+
+2. RETRIEVAL MODE  
+   - Use ONLY the user's uploaded documents (lease abstracts, CAM, OPEX, amendments, 
+     rent rolls, financials).
+   - You MUST rely exclusively on the provided document chunks.
+   - If the needed data is not in the provided context, respond:  
+     “This information is not available in your uploaded documents.”
+
+3. GOOGLE MODE  
+   - Use Google Search for public information:  
+     market rents, cap rates, comps, tenant/company details, executives, news, etc.
+   - Do NOT combine Google data with document data unless asked.
+
+RULES:
+- Stay strictly within the domain of CRE leasing, property management, 
+  underwriting, finance, and operations.
+- Do NOT give legal or tax advice. If asked, respond:  
+  “I can only provide general CRE insights — this is not legal or tax advice.”
+- Keep answers professional, structured, and concise.
+"""
 
 
 CLASSIFICATION_PROMPT = """
-Classify the user query into exactly one of these two categories:
+Classify the user query into exactly one of these three categories:
 
-- 'general' → greetings, jokes, definitions, explanations of real estate terms (e.g. "what is CAM?", "hi", "how are you?", "what is triple net?")
-- 'retrieval' → any question that needs data from uploaded documents (rent amount, lease end date, tenant name, parking, utilities, etc.)
+1. 'general' → greetings, rewriting, summarization, drafting, suggestions, strategy, explanations of concepts.  
+   *Does NOT require external data.*
+
+2. 'retrieval' → requires information from the user's uploaded documents only  
+   (lease data, rent amount, CAM, tenant name, suite details, expiration dates, property info).
+
+3. 'google' → requires public/external information NOT inside uploaded documents  
+   (market rent, cap rates, sale prices, comps, company info, news, public data, “current”, “latest”, etc.).
 
 Query: {query}
 
-Return ONLY the word: general or retrieval
+Return ONLY: general, retrieval, or google
 """
 
 GENERAL_PROMPT_TEMPLATE = """

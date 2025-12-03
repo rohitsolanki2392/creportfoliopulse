@@ -22,7 +22,7 @@ class StandaloneFileResponse(BaseModel):
     uploaded_at: datetime
     size: str
     category: str
-    gcs_path: str
+    gcs_path:  Optional[str]
 
     class Config:
         from_attributes = True
@@ -53,7 +53,6 @@ class FileResponse(BaseModel):
     uploaded_at: datetime
     size: str
     category: Optional[str]
-    gcs_path: str
+    gcs_path:  Optional[str]
     building_id: Optional[int]
-
 

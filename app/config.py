@@ -45,3 +45,12 @@ dimension = int(os.getenv("EMBEDDING_DIMENSION", "1536"))
 FIRESTORE_SECRET_KEY=os.getenv("FIRESTORE_SECRET_KEY")
 cloud = os.getenv("PINECONE_CLOUD")
 region = os.getenv("PINECONE_REGION")
+EMBED_BATCH_SIZE = 100
+MAX_CHUNK_SIZE = 1200
+OVERLAP = 100
+
+PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
+LOCATION = os.getenv("KMS_LOCATION", "global")
+KEYRING = os.getenv("KMS_KEYRING")
+KEY_NAME = os.getenv("KMS_KEY_NAME")
+POLL_INTERVAL_SEC = int(os.getenv("POLL_INTERVAL_SEC", "120"))

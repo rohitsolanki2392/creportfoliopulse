@@ -4,12 +4,9 @@ import json
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import asdict, dataclass
 import logging
-
+from app.config import MAX_CHUNK_SIZE,OVERLAP
 logger = logging.getLogger(__name__)
 
-EMBED_BATCH_SIZE = 100
-MAX_CHUNK_SIZE = 1200
-OVERLAP = 100
 
 @dataclass
 class ChunkMetadata:
@@ -150,9 +147,52 @@ Preview: {text[:1800]}
                     if len(chunk) > 100:
                         chunks.append((chunk, [f"Entry {i+1}"]))
                 if chunks:
-                    return chunks[1:]  # skip possible header
+                    return chunks[1:] 
         return self._split_semantic(text)
+    
+    def _split_tabular(self, text: str) -> List[Tuple[str, List[str]]]:
+        """Split tabular data into chunks (rows or logical groups)"""
+        chunks = []
+        
 
+        lines = text.split('\n')
+        table_rows = []
+        current_group = []
+        header = None
+        
+        for i, line in enumerate(lines):
+            line = line.strip()
+            if not line:
+                if current_group:
+                    table_rows.append(current_group)
+                    current_group = []
+                continue
+            
+        
+            if '\t' in line or '|' in line or re.search(r'\s{3,}', line):
+                if i == 0 or (not table_rows and not current_group):
+                    header = line 
+                current_group.append(line)
+            else:
+                if current_group:
+                    table_rows.append(current_group)
+                    current_group = []
+        
+        if current_group:
+            table_rows.append(current_group)
+        
+
+        if table_rows:
+            for idx, group in enumerate(table_rows):
+                chunk_text = (header + "\n" if header else "") + "\n".join(group)
+                if len(chunk_text) > 80:
+                    chunks.append((chunk_text, [f"Table Row Group {idx+1}"]))
+        
+
+        if not chunks:
+            return self._split_semantic(text)
+        
+        return chunks
     def _split_by_sections(self, text: str, markers: List[str]) -> List[Tuple[str, List[str]]]:
         patterns = []
         for m in markers:
@@ -243,11 +283,90 @@ Preview: {text[:1800]}
                 fields[key] = match.group(1).strip()
         return fields
 
-    def _guess_primary_entity(self, text: str, global_entities: dict):
+    def _guess_primary_entity(self, text: str, global_entities: dict) -> Dict[str, Optional[str]]:
+        """Dynamically extract primary entity from text using global entities and patterns"""
+        
 
-        if "Starbucks" in text: return {"type": "tenant", "value": "Starbucks"}
-        if "123 Main St" in text: return {"type": "building", "value": "123 Main St"}
+        if global_entities:
+            for entity_type, entity_values in global_entities.items():
+                for entity_value in entity_values:
+                    if entity_value.lower() in text.lower():
+                        return {"type": entity_type, "value": entity_value}
+        
+
+        tenant_match = re.search(r'Tenant[:\s]+([A-Z][A-Za-z\s&.,]+?)(?:\n|,|\||$)', text)
+        if tenant_match:
+            tenant_name = tenant_match.group(1).strip()
+
+            tenant_name = re.sub(r'[,.\s]+$', '', tenant_name)[:50]
+            if len(tenant_name) > 2:
+                return {"type": "tenant", "value": tenant_name}
+        
+   
+        building_match = re.search(r'Building[:\s]+([^\n]+)', text, re.IGNORECASE)
+        if building_match:
+            building_name = building_match.group(1).strip()[:50]
+            return {"type": "building", "value": building_name}
+        
+        address_match = re.search(r'(?:Address[:\s]+)?(\d+\s+[A-Z][a-z]+(?:\s[A-Z][a-z]+)*(?:\s(?:St|Street|Ave|Avenue|Blvd|Boulevard|Rd|Road)\.?))', text)
+        if address_match:
+            address = address_match.group(1).strip()
+            return {"type": "building", "value": address}
+        
+ 
+        lease_match = re.search(r'Lease[:\s#]+([A-Z0-9-]+)', text, re.IGNORECASE)
+        if lease_match:
+            lease_id = lease_match.group(1).strip()
+            return {"type": "lease", "value": lease_id}
+        
+
+        broker_match = re.search(r'(?:Broker|Agent|Contact)[:\s]+([A-Z][a-z]+\s+[A-Z][a-z]+)', text, re.IGNORECASE)
+        if broker_match:
+            broker_name = broker_match.group(1).strip()
+            return {"type": "broker", "value": broker_name}
+  
         return {"type": None, "value": None}
 
-    async def _extract_global_entities_once(self, text: str, structure: dict):
-        return {}
+    async def _extract_global_entities_once(self, text: str, structure: dict) -> Dict[str, List[str]]:
+        """Extract important entities from the entire document using LLM"""
+        
+  
+        preview = text[:3000]
+        doc_type = structure.get("doc_type", "other")
+        
+        prompt = f"""Extract key entities from this {doc_type} document. Return ONLY JSON.
+
+Document preview:
+{preview}
+
+Return a JSON object with entity types as keys and lists of entity values:
+{{
+  "tenants": ["Company A", "Company B"],
+  "buildings": ["123 Main St", "Building Tower"],
+  "leases": ["LSE-2024-001"],
+  "brokers": ["John Smith", "Jane Doe"]
+}}
+
+Only include entities that appear in the text. Return empty lists if none found."""
+
+        try:
+            response = await asyncio.to_thread(
+                lambda: self.llm.generate_content(
+                    prompt,
+                    generation_config={"response_mime_type": "application/json"}
+                )
+            )
+            entities = json.loads(response.text)
+            
+            
+            cleaned = {}
+            for entity_type, values in entities.items():
+                if isinstance(values, list) and values:
+                    cleaned[entity_type] = [v[:100] for v in values if v and len(str(v).strip()) > 2]
+            
+            logger.info(f"  Extracted global entities: {list(cleaned.keys())}")
+            return cleaned
+            
+        except Exception as e:
+            logger.warning(f"Global entity extraction failed: {e}")
+            return {}

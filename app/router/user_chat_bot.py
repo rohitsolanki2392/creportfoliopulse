@@ -77,7 +77,7 @@ async def list_simple_files(
 ):
     return await list_simple_files_service(building_id, category, current_user, db)
 
-@router.delete("/delete_simple_file/", response_model=StandaloneFileResponse)
+@router.delete("/delete_simple_file/")
 async def delete_simple_file(
     building_id: Optional[int] = Query(None),
     file_id: str = Query(...),

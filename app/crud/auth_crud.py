@@ -7,7 +7,6 @@ from app.models.models import User, OTP, Company, Token
 import secrets
 
 
-
 async def get_user_by_email(db: AsyncSession, email: str) -> Optional[User]:
     result = await db.execute(select(User).where(User.email.ilike(email)))
     return result.scalars().first()

@@ -64,7 +64,7 @@ async def list_categorized_files(
     
     return files_list
 
-@router.delete("/delete", response_model=StandaloneFileResponse)
+@router.delete("/delete")
 async def delete_categorized_file(
     building_id: Optional[int] = Query(None),
     file_id: str = Query(...),

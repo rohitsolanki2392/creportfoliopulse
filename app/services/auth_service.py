@@ -19,7 +19,6 @@ from app.utils.auth_utils import verify_password, get_password_hash, create_bear
 from app.services.email_service import cleanup_expired_otps, generate_otp, send_otp_email
 import aiofiles
 
-
 async def register_user_service(user, db: AsyncSession):
     await cleanup_expired_otps(db)
 
@@ -218,13 +217,11 @@ async def list_all_users_service(current_user: User, db: AsyncSession) -> List[U
             name=u.name,
             created=u.created_at,
             actions=["edit", "delete"],
-            gemini_status=u.gemini_chat_enabled
-
+            gemini_status=u.gemini_chat_enabled,
+            form_status=u.forum_enabled       
         ) for u in users
     ]
     return user_list
-
-
 
 async def delete_user_service(db: AsyncSession, current_user: User, email: str):
     user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
@@ -293,6 +290,7 @@ async def get_user_profile_service(current_user):
         "photo_url": current_user.photo_url,
         "bg_photo_url": current_user.bg_photo_url, 
         "gemini_status": current_user.gemini_chat_enabled,
+        "forum_status": current_user.forum_enabled,
         "photo_base64": None,
         "bg_photo_base64": None  
     }

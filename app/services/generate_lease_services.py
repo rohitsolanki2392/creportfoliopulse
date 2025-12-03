@@ -29,17 +29,24 @@ async def save_lease_file(content: str, company_id: str, category: str, file_id:
     return file_path
 
 async def generate_lease_text(metadata: Dict[str, Any]) -> str:
-    lease_text = LEASE_TEMPLATE
     try:
         prompt = f"""
-        You are an expert in lease document automation.
-        Use this metadata to fill placeholders in the template below.
+        You are an expert in lease-document automation.
+        Using the provided metadata, fill all placeholders in the lease template exactly as instructed.
 
         Template:
         {LEASE_TEMPLATE}
 
         Metadata:
         {metadata}
+
+        Instructions:
+        - Output only the completed template with all placeholders filled using the metadata.
+        - Do not add explanations, comments, or extra text.
+        - Preserve all formatting from the template.
+
+        Response:
+        Only the fully populated template.
         """
 
         response = await asyncio.to_thread(
@@ -49,34 +56,18 @@ async def generate_lease_text(metadata: Dict[str, Any]) -> str:
             )
         )
 
-        raw_text = response.text.strip()
-
-
-        if raw_text.startswith("```"):
-            raw_text = raw_text.strip("`").replace("json", "", 1).strip()
-
-
-        import re
-        match = re.search(r"\{.*\}", raw_text, re.DOTALL)
-        if not match:
-            raise ValueError(f"Cannot parse JSON from LLM output: {raw_text}")
-        replacements = json.loads(match.group())
-
-
-        for placeholder, value in replacements.items():
-            lease_text = lease_text.replace(placeholder, str(value or "N/A"))
+        lease_text = response.text.strip()
 
         return lease_text
 
     except Exception as e:
         logger.error(f"Error in generate_lease_text: {e}")
         return f"Error processing lease template: {e}"
-
-
+    
 async def save_file_metadata(
     db: AsyncSession,
     file,
-    gcs_path: str,
+    file_path: str,
     category: str,
     current_user: User,
     structured_metadata: str
@@ -87,7 +78,7 @@ async def save_file_metadata(
         original_file_name=file.filename,
         user_id=current_user.id,
         category=category,
-        gcs_path=gcs_path,
+        file_path=file_path,
         company_id=current_user.company_id,
         uploaded_at=datetime.utcnow(),
         structured_metadata=structured_metadata

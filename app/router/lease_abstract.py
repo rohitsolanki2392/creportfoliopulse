@@ -5,14 +5,13 @@ import io
 import google.generativeai as genai
 from app.services.prompts import PROMPT
 from app.config import MODEL,google_api_key
-from fastapi import APIRouter, UploadFile, File, Form, Depends
+from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.models import StandaloneFile, User
 from app.database.db import get_db
 from app.utils.auth_utils import get_current_user
 from app.services.lease_abs_services import  delete_file_service, list_category_files_service, process_lease_abstract
 from app.utils.process_file import process_uploaded_file
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.params import Form
 from app.models.models import User
 import logging
@@ -31,18 +30,23 @@ async def summarize(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files allowed")
-    
+
     content = await file.read()
     if len(content) > 32 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File size exceeds 32 MB")
+
 
     pdf_file = genai.upload_file(io.BytesIO(content), mime_type="application/pdf")
     model = genai.GenerativeModel(MODEL)
 
     try:
-        response = model.generate_content([PROMPT, pdf_file], generation_config={"temperature": 0.1})
+        response = model.generate_content(
+            [PROMPT, pdf_file],
+            generation_config={"temperature": 0.1}
+        )
         output = response.text
         logger.info(f"Gemini response: {output}")
     except Exception as e:
@@ -56,7 +60,16 @@ async def summarize(
 
     file_id = str(uuid.uuid4())
 
+    base_dir = os.path.join("uploads", str(current_user.company_id), category)
+    os.makedirs(base_dir, exist_ok=True)
 
+    output_name = f"{category}_summary_{uuid.uuid4().hex}.txt"
+    output_path = os.path.join(base_dir, output_name)
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(output)
+
+ 
     new_file = StandaloneFile(
         file_id=file_id,
         original_file_name=file.filename,
@@ -64,7 +77,7 @@ async def summarize(
         company_id=current_user.company_id,
         category=category,
         uploaded_at=datetime.utcnow(),
-        gcs_path=None,      # No local file stored
+        file_path=output_path,
         file_size=str(len(content)),
     )
 
@@ -72,17 +85,10 @@ async def summarize(
     await db.commit()
     await db.refresh(new_file)
 
-    TEMP_SUMMARY_DIR = "temp_summary"
-    os.makedirs(TEMP_SUMMARY_DIR, exist_ok=True)
-
-    temp_summary_path = os.path.join(TEMP_SUMMARY_DIR, f"{file_id}.txt")
-
-    with open(temp_summary_path, "w", encoding="utf-8") as f:
-        f.write(output)
 
     try:
         await process_uploaded_file(
-            file_path=temp_summary_path,
+            file_path=output_path,
             filename=file.filename,
             file_id=file_id,
             category=category,
@@ -91,16 +97,13 @@ async def summarize(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Indexing error: {e}")
-    finally:
-        if os.path.exists(temp_summary_path):
-            os.remove(temp_summary_path)
+
 
     return {
         "message": "Summary generated, saved, and indexed successfully.",
         "file_id": new_file.file_id,
-         "file_name": file.filename,    
+        "file_name": file.filename,
     }
-
 
 @router.post("/upload/simple")
 async def upload_lease_abstract(

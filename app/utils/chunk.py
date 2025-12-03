@@ -7,12 +7,12 @@ from app.services.prompts import dynamic_chunk_prompt, chunk_check_prompt
 import re
 from typing import List
 import asyncio
-
+from app.config import model
 
 async def is_structured_text(sample_text: str, google_api_key: str) -> bool:
     try:
         gen.configure(api_key=google_api_key)
-        model = gen.GenerativeModel("gemini-2.0-flash")
+       
 
 
 
@@ -55,7 +55,6 @@ async def dynamic_split_text(text: str, google_api_key: str, max_chars: int = 15
     for _, block in enumerate(text_blocks, start=1):
 
         try:
-            model = gen.GenerativeModel("gemini-2.0-flash")
             result = model.generate_content(dynamic_chunk_prompt)
             response_text = re.sub(r"^```json|```$", "", result.text.strip()).strip()
             chunks = json.loads(response_text)

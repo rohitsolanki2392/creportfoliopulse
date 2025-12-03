@@ -76,7 +76,11 @@ async def get_session_history_service(session_id: str, current_user, db: AsyncSe
     if not history:
         return []
 
-    return [{"question": h.question, "answer": h.answer} for h in history]
+    return [{
+        "question": h.question,
+        "answer": h.answer,
+    } for h in history]
+
 
 async def delete_session_service(session_id: str, current_user, db: AsyncSession):
     """Delete a chat session."""

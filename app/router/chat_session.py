@@ -5,11 +5,10 @@ from typing import  Optional
 from app.database.db import get_db
 from app.services.session_service import delete_session_service, get_session_history_service, list_chat_sessions_service
 from app.utils.auth_utils import get_current_user
-
+import secrets
 router = APIRouter()
 
 
-import secrets
 
 def generate_session_id(num_bytes: int = 32) -> str:
     """Return a URL-safe base64-like session ID (~43 chars for 32 bytes)."""

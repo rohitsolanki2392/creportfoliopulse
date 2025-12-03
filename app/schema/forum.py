@@ -25,3 +25,28 @@ class PortfolioThread(BaseModel):
 
 class ThreadWithThoughts(PortfolioThread):
     thoughts: List[ForumThought] = []
+
+
+
+class ThreadCreate(BaseModel):
+    title: str
+
+class ThoughtCreate(BaseModel):
+    content: str
+
+class ThoughtOut(BaseModel):
+    id: str
+    author_name: str
+    author_uid: str
+    content: str
+    created_at: datetime
+    deleted: bool = False
+
+class ThreadOut(BaseModel):
+    id: str
+    title: str
+    author_name: str
+    created_at: datetime
+    last_thought_at: Optional[datetime] = None
+    thought_count: int = 0
+    thoughts: List[ThoughtOut] = []
