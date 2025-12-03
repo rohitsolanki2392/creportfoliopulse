@@ -60,7 +60,7 @@ Thumbs.db
 cloud_sql_proxy
 cloud_sql_proxy.exe
 
-
+.json
 app/__pycache__/
 app/crud/__pycache__/
 app/router/__pycache__/
